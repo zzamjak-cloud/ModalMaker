@@ -59,3 +59,8 @@ coverage/
 
 # === 타입 체크 캐시 ===
 *.tsbuildinfo
+
+# === 에디터/에이전트 로컬 상태 ===
+.claude/
+.omc/
+.plans/
