@@ -7,7 +7,7 @@ import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore, cloneWithNewIds, createEmptyDocument } from "@/stores/layoutStore";
 import { BUILTIN_PRESETS, PRESET_CATEGORIES, type PresetCategory, type PresetEntry } from "./presetRegistry";
-import { localAdapter } from "@/features/persistence/local";
+import { currentAdapter } from "@/features/persistence";
 import type { LayoutDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
 
@@ -19,7 +19,7 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
   const [userPresets, setUserPresets] = useState<LayoutDocument[]>([]);
 
   useEffect(() => {
-    localAdapter.listUserPresets().then(setUserPresets);
+    currentAdapter().listUserPresets().then(setUserPresets);
   }, [tab]);
 
   const visible = useMemo(() => {

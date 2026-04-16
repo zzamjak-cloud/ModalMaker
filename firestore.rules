@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// ModalMaker Firestore 규칙
+// - /users/{uid}/documents/{docId}: 소유자만 읽기/쓰기
+// - /users/{uid}/presets/{presetId}: 소유자만 읽기/쓰기
+// - /public/documents/{docId}: isPublic=true인 문서는 누구나 읽기 가능, 쓰기는 소유자만
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/documents/{docId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/presets/{presetId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // 공유 링크용 공개 문서 (Phase 5의 isPublic 플래그)
+    match /public/documents/{docId} {
+      allow read: if resource.data.isPublic == true;
+      allow write: if request.auth != null
+                   && request.auth.uid == resource.data.ownerUid;
+    }
+  }
+}

@@ -26,7 +26,8 @@ import {
   toMermaid,
   type ExportFormat,
 } from "@/features/export";
-import { localAdapter } from "@/features/persistence/local";
+import { currentAdapter } from "@/features/persistence";
+import { AuthButton } from "@/features/auth/AuthButton";
 import { saveTextFile } from "@/lib/tauri";
 import { cloneWithNewIds } from "@/stores/layoutStore";
 import type { LayoutDocument } from "@/types/layout";
@@ -55,7 +56,7 @@ export function Toolbar({ onNewClick }: Props) {
   const exported = renderExport(doc, format, includePrompt);
 
   async function save() {
-    await localAdapter.saveDocument(doc);
+    await currentAdapter().saveDocument(doc);
     flash(`저장됨: ${doc.title}`);
   }
 
@@ -66,12 +67,12 @@ export function Toolbar({ onNewClick }: Props) {
       title: `${doc.title} (프리셋)`,
       root: cloneWithNewIds(doc.root),
     };
-    await localAdapter.saveUserPreset(copy);
+    await currentAdapter().saveUserPreset(copy);
     flash("내 프리셋에 저장되었습니다");
   }
 
   async function openLoadDialog() {
-    const docs = await localAdapter.listDocuments();
+    const docs = await currentAdapter().listDocuments();
     setSavedDocs(docs);
     setOpenLoad(true);
   }
@@ -182,6 +183,10 @@ export function Toolbar({ onNewClick }: Props) {
           <Download size={14} />
           <span>Export</span>
         </ToolbarButton>
+
+        <div className="h-5 w-px bg-neutral-800" />
+
+        <AuthButton />
       </div>
 
       {openLoad && (

@@ -71,12 +71,49 @@ npm run tauri build
 ## 🗺️ 로드맵
 
 - **Phase 1–2** ✅ 저장소 부트스트랩 / 스택 세팅
-- **Phase 3** ⏳ MVP: 캔버스 + 기본 컴포넌트 + Export + 프리셋 갤러리 + 로컬 저장
-- **Phase 4** ⏳ Tauri 데스크톱 통합
-- **Phase 5** ⏳ Firebase Auth / Firestore 동기화 / 공유 링크
-- **Phase 6** ⏳ GitHub Actions CI/CD
+- **Phase 3** ✅ MVP: 캔버스 + 기본 컴포넌트 + Export + 프리셋 갤러리 + 로컬 저장
+- **Phase 4** ✅ Tauri 데스크톱 통합 (커맨드 + 멀티 플랫폼 아이콘)
+- **Phase 5** ✅ Firebase Auth / Firestore 동기화 어댑터 (프로젝트 연결은 수동)
+- **Phase 6** ✅ GitHub Actions CI/CD
 
-상세 계획은 [`/Users/woody/.claude/plans/`]에 보관된 기획서 참고.
+---
+
+## 🔥 Firebase 설정 (선택)
+
+Firebase 없이도 IndexedDB 로컬 저장만으로 완전히 동작합니다. 클라우드 동기화가 필요하면:
+
+```bash
+# 1. 로그인 + 프로젝트 생성
+firebase login
+firebase projects:create modalmaker-app
+
+# 2. 웹 앱 등록 (콘솔 > 프로젝트 설정 > 앱 추가)
+# 발급된 설정값을 .env.local에 복사
+cp .env.example .env.local
+# VITE_FIREBASE_* 값 편집
+
+# 3. Firestore + Hosting 초기화
+firebase init firestore hosting
+# firestore.rules / firebase.json은 이미 커밋되어 있으므로 기존 파일 유지 선택
+
+# 4. 로컬 테스트
+firebase emulators:start --only firestore,auth
+
+# 5. 배포 (수동)
+npm run build
+firebase deploy
+```
+
+---
+
+## 🚀 GitHub Actions
+
+- `main` 푸시 → `.github/workflows/web-deploy.yml`이 Firebase Hosting에 자동 배포
+- `v*` 태그 푸시 → `.github/workflows/desktop-build.yml`이 macOS(arm/x86)/Windows/Linux 바이너리를 빌드하고 Release 드래프트에 첨부
+
+필요한 GitHub Secrets:
+- `FIREBASE_SERVICE_ACCOUNT` — Firebase Hosting 배포용
+- `VITE_FIREBASE_*` — Firebase 웹 설정 6종 (빌드 시 주입)
 
 ---
 
