@@ -10,6 +10,7 @@ import { isContainerKind, type LayoutNode } from "@/types/layout";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
+import { applySizing } from "./applySizing";
 import {
   CheckboxProps,
   ContainerProps,
@@ -95,7 +96,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
           </div>
         )}
         {open && (
-          <div style={containerStyle(p)}>
+          <div style={{ ...containerStyle(p), ...applySizing(node) }}>
             {node.children?.length ? (
               <>
                 <DropZone
@@ -135,6 +136,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       {...attributes}
       onClick={selectHandler}
       className={cn(outline, "px-1 py-0.5")}
+      style={applySizing(node)}
     >
       {renderLeaf(node, editingLeaf, setEditingLeaf)}
     </div>
@@ -301,6 +303,26 @@ function TextLeaf({
     );
   }
 
+  const fixed = !!node.sizing?.fixedSize;
+  if (fixed) {
+    return (
+      <div
+        className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
+        style={{
+          color: p.color,
+          width: node.sizing?.width,
+          height: node.sizing?.height,
+          overflow: "hidden",
+        }}
+        onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        onKeyDown={(e) => { if (e.key === "F2") { e.preventDefault(); setEditing(true); } }}
+        tabIndex={0}
+        title="더블 클릭하여 편집"
+      >
+        {p.text || "Text"}
+      </div>
+    );
+  }
   return (
     <span
       className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
