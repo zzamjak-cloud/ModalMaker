@@ -12,8 +12,8 @@ const SCALE_STEP = 0.1;
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 4;
 
-/** 핀치(Ctrl+휠) 누적 deltaY — 한 단계(10%)마다 적용. 고정: 민감(high) */
-const PINCH_WHEEL_ACCUM_THRESHOLD = 9;
+/** 트랙패드 핀치 줌 민감도 — ReactFlow 기본값에 맞춤 */
+const PINCH_SENSITIVITY = 0.008;
 
 type CanvasViewState = {
   scale: number;
@@ -80,7 +80,6 @@ export function CanvasViewport({
   const [view, setView] = useState<CanvasViewState>({ scale: 1, panX: 0, panY: 0 });
   /** 첫 성공 fit 전엔 scale=1이 한 프레임 그려져 깜빡임 → 맞춤 적용 후에만 표시 */
   const [contentVisible, setContentVisible] = useState(false);
-  const wheelAccumRef = useRef(0);
   const viewRef = useRef(view);
   const gestureBaseScaleRef = useRef(1);
   const [isPanning, setIsPanning] = useState(false);
@@ -270,28 +269,6 @@ export function CanvasViewport({
     }));
   }, []);
 
-  /** 포인터 기준 ±10% (트랙패드 핀치) — 스케일 중심이 콘텐츠 중앙이므로 포인터-중심 보정 */
-  const zoomStepAtPointer = useCallback((clientX: number, clientY: number, deltaSteps: number) => {
-    const outer = containerRef.current;
-    const inner = transformInnerRef.current;
-    if (!outer || !inner) return;
-    const cr = outer.getBoundingClientRect();
-    const ir = inner.getBoundingClientRect();
-    const mx = clientX - cr.left;
-    const my = clientY - cr.top;
-    const cx = ir.left - cr.left + ir.width / 2;
-    const cy = ir.top - cr.top + ir.height / 2;
-    setView((v) => {
-      const nextScale = snapScale(v.scale + deltaSteps * SCALE_STEP);
-      const ratio = nextScale / v.scale;
-      return {
-        scale: nextScale,
-        panX: v.panX + (1 - ratio) * (mx - cx),
-        panY: v.panY + (1 - ratio) * (my - cy),
-      };
-    });
-  }, []);
-
   /** 툴바 맞춤: 이전에 rAF 재시도 한도에 걸린 뒤에도 다시 맞춤되도록 카운터 리셋 */
   const fitFromToolbar = useCallback(() => {
     fitRetryCountRef.current = 0;
@@ -316,7 +293,6 @@ export function CanvasViewport({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const threshold = PINCH_WHEEL_ACCUM_THRESHOLD;
 
     const onWheel = (e: WheelEvent) => {
       // macOS 트랙패드: 핀치 줌은 보통 ctrl+wheel, 두 손가락 스크롤은 deltaX/Y만 옴 → 패닝
@@ -325,20 +301,25 @@ export function CanvasViewport({
         let dy = e.deltaY;
         if (e.deltaMode === 1) dy *= 16;
         else if (e.deltaMode === 2) dy *= el.clientHeight;
-        wheelAccumRef.current += dy;
-        let acc = wheelAccumRef.current;
-        let deltaSteps = 0;
-        if (acc >= threshold) {
-          const n = Math.floor(acc / threshold);
-          deltaSteps = -n;
-          acc -= n * threshold;
-        } else if (acc <= -threshold) {
-          const n = Math.floor(acc / -threshold);
-          deltaSteps = n;
-          acc += n * threshold;
-        }
-        wheelAccumRef.current = acc;
-        if (deltaSteps !== 0) zoomStepAtPointer(e.clientX, e.clientY, deltaSteps);
+        // 누적 임계값 없이 deltaY에 비례해 연속 줌 — ReactFlow와 동일한 방식
+        const outer = containerRef.current;
+        const inner = transformInnerRef.current;
+        if (!outer || !inner) return;
+        const cr = outer.getBoundingClientRect();
+        const ir = inner.getBoundingClientRect();
+        const mx = e.clientX - cr.left;
+        const my = e.clientY - cr.top;
+        const cx = ir.left - cr.left + ir.width / 2;
+        const cy = ir.top - cr.top + ir.height / 2;
+        setView((v) => {
+          const nextScale = clamp(v.scale * Math.pow(2, -dy * PINCH_SENSITIVITY), MIN_SCALE, MAX_SCALE);
+          const ratio = nextScale / v.scale;
+          return {
+            scale: nextScale,
+            panX: v.panX + (1 - ratio) * (mx - cx),
+            panY: v.panY + (1 - ratio) * (my - cy),
+          };
+        });
         return;
       }
       e.preventDefault();
@@ -355,7 +336,7 @@ export function CanvasViewport({
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [zoomStepAtPointer]);
+  }, []);
 
   // Safari: 트랙패드 핀치는 ctrl+wheel 대신 gesturechange 로 옴
   useEffect(() => {
@@ -374,7 +355,7 @@ export function CanvasViewport({
     const onGestureChange = (e: Event) => {
       e.preventDefault();
       const g = e as unknown as { scale: number; clientX: number; clientY: number };
-      const nextScale = snapScale(gestureBaseScaleRef.current * g.scale);
+      const nextScale = clamp(gestureBaseScaleRef.current * g.scale, MIN_SCALE, MAX_SCALE);
       const inner = transformInnerRef.current;
       if (!inner) return;
       const cr = el.getBoundingClientRect();
