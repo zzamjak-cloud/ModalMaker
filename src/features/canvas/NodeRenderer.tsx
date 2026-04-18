@@ -52,7 +52,15 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
   return base;
 }
 
-export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: number }) {
+export function NodeRenderer({
+  node,
+  depth = 0,
+  visitedModuleIds,
+}: {
+  node: LayoutNode;
+  depth?: number;
+  visitedModuleIds?: Set<string>;
+}) {
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
 
@@ -79,6 +87,52 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
     e.stopPropagation();
     select(node.id);
   };
+
+  // module-ref는 리프지만 내부적으로 다른 모듈 트리를 재귀 렌더하므로
+  // 일반 리프 경로 전에 처리하고, visitedModuleIds로 순환 참조를 감지한다.
+  if (node.kind === "module-ref") {
+    const p = node.props as ModuleRefProps;
+    const mod = useLayoutStore
+      .getState()
+      .document.modules.find((m) => m.id === p.moduleId);
+
+    const isCircular = !!visitedModuleIds && visitedModuleIds.has(p.moduleId);
+    const nextVisited = new Set(visitedModuleIds ?? []);
+    nextVisited.add(p.moduleId);
+
+    const content = !mod ? (
+      <span className="text-xs text-rose-400">[모듈 없음: {p.moduleId}]</span>
+    ) : isCircular ? (
+      <span
+        className="text-xs text-amber-400"
+        title="순환 참조로 렌더 중단"
+      >
+        ↻ 순환 참조: {mod.name}
+      </span>
+    ) : (
+      <NodeRenderer
+        node={mod.root}
+        depth={depth + 1}
+        visitedModuleIds={nextVisited}
+      />
+    );
+
+    return (
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        onClick={selectHandler}
+        className={cn(outline, "relative px-1 py-0.5")}
+        style={applySizing(node)}
+      >
+        {content}
+        <div className="pointer-events-none absolute -top-4 left-0 select-none text-[9px] uppercase tracking-wider text-neutral-500">
+          {mod ? `⊚ ${mod.name}` : "⊚ ?"}
+        </div>
+      </div>
+    );
+  }
 
   if (isContainerKind(node.kind)) {
     const p = node.props as ContainerProps & FoldableProps;
@@ -109,7 +163,11 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
                 />
                 {node.children.map((c, i) => (
                   <Fragment key={c.id}>
-                    <NodeRenderer node={c} depth={depth + 1} />
+                    <NodeRenderer
+                      node={c}
+                      depth={depth + 1}
+                      visitedModuleIds={visitedModuleIds}
+                    />
                     <DropZone
                       containerId={node.id}
                       index={i + 1}
@@ -141,7 +199,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       className={cn(outline, "px-1 py-0.5")}
       style={applySizing(node)}
     >
-      {renderLeaf(node, editingLeaf, setEditingLeaf, depth)}
+      {renderLeaf(node, editingLeaf, setEditingLeaf)}
     </div>
   );
 }
@@ -150,7 +208,6 @@ function renderLeaf(
   node: LayoutNode,
   editing: boolean,
   setEditing: (v: boolean) => void,
-  depth: number,
 ): React.ReactNode {
   switch (node.kind) {
     case "text":
@@ -231,19 +288,6 @@ function renderLeaf(
         return <span className="text-xs text-neutral-500">?{p.name ?? ""}</span>;
       }
       return <Comp size={p.size ?? 20} color={p.color ?? "currentColor"} />;
-    }
-    case "module-ref": {
-      const p = node.props as ModuleRefProps;
-      const mod = useLayoutStore
-        .getState()
-        .document.modules.find((m) => m.id === p.moduleId);
-      if (!mod) {
-        return (
-          <span className="text-xs text-rose-400">[모듈 없음: {p.moduleId}]</span>
-        );
-      }
-      // 순환 감지는 Task 4에서 정식 구현. 여기선 단순히 root를 inline으로 렌더.
-      return <NodeRenderer node={mod.root} depth={depth + 1} />;
     }
     default:
       return null;
