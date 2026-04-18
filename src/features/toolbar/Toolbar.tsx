@@ -33,6 +33,7 @@ import { cloneWithNewIds } from "@/stores/layoutStore";
 import type { LayoutDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
 import { SaveAsDialog } from "./SaveAsDialog";
+import { ViewportSelector } from "./ViewportSelector";
 
 interface Props {
   onNewClick: () => void;
@@ -181,6 +182,9 @@ export function Toolbar({ onNewClick }: Props) {
           className="w-48 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
           placeholder="제목"
         />
+
+        <div className="h-5 w-px bg-neutral-800" />
+        <ViewportSelector />
 
         <div className="flex-1" />
 
