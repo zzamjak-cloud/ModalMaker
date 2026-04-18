@@ -19,6 +19,7 @@ import { Canvas } from "@/features/canvas/Canvas";
 import { Inspector } from "@/features/inspector/Inspector";
 import { LayerTree } from "@/features/layer-tree/LayerTree";
 import { ModulePanel } from "@/features/modules/ModulePanel";
+import { NodeView } from "@/features/node-view/NodeView";
 import { PresetGallery } from "@/features/presets/PresetGallery";
 import { useLayoutStore, createNode } from "@/stores/layoutStore";
 import { cn } from "@/lib/cn";
@@ -29,6 +30,7 @@ export default function App() {
   const addNode = useLayoutStore((s) => s.addNode);
   const moveNode = useLayoutStore((s) => s.moveNode);
   const select = useLayoutStore((s) => s.select);
+  const mode = useLayoutStore((s) => s.mode);
 
   const [galleryOpen, setGalleryOpen] = useState(true);
   const [layerHeight, setLayerHeight] = useState(260);
@@ -132,9 +134,15 @@ export default function App() {
             </div>
           </aside>
 
-          {/* 중앙: 캔버스 */}
-          <main className="flex flex-1 items-center justify-center overflow-auto bg-neutral-950 p-8">
-            <Canvas />
+          {/* 중앙: 캔버스 또는 노드 뷰 */}
+          <main className="flex flex-1 overflow-hidden bg-neutral-950">
+            {mode === "node" ? (
+              <NodeView />
+            ) : (
+              <div className="flex flex-1 items-center justify-center overflow-auto p-8">
+                <Canvas />
+              </div>
+            )}
           </main>
 
           {/* 우측: 인스펙터 */}

@@ -14,6 +14,8 @@ import {
   Sparkles,
   Plus,
   Bookmark,
+  Layers,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
@@ -52,6 +54,8 @@ export function Toolbar({ onNewClick }: Props) {
   const redo = useLayoutStore((s) => s.redo);
   const updateTitle = useLayoutStore((s) => s.updateTitle);
   const setDocument = useLayoutStore((s) => s.setDocument);
+  const mode = useLayoutStore((s) => s.mode);
+  const setMode = useLayoutStore((s) => s.setMode);
 
   const [includePrompt, setIncludePrompt] = useState(false);
   const [format, setFormat] = useState<ExportFormat>("markdown");
@@ -189,7 +193,43 @@ export function Toolbar({ onNewClick }: Props) {
         />
 
         <div className="h-5 w-px bg-neutral-800" />
-        <ViewportSelector />
+
+        {/* Canvas / Node 모드 토글 */}
+        <div className="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
+          <button
+            onClick={() => setMode("canvas")}
+            className={cn(
+              "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+              mode === "canvas"
+                ? "bg-sky-500/20 text-sky-200"
+                : "text-neutral-400 hover:text-neutral-200",
+            )}
+            title="Canvas 편집 모드"
+          >
+            <Layers size={12} />
+            Canvas
+          </button>
+          <button
+            onClick={() => setMode("node")}
+            className={cn(
+              "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+              mode === "node"
+                ? "bg-sky-500/20 text-sky-200"
+                : "text-neutral-400 hover:text-neutral-200",
+            )}
+            title="Node View (페이지 다이어그램)"
+          >
+            <LayoutGrid size={12} />
+            Node
+          </button>
+        </div>
+
+        {mode === "canvas" && (
+          <>
+            <div className="h-5 w-px bg-neutral-800" />
+            <ViewportSelector />
+          </>
+        )}
 
         <div className="flex-1" />
 
