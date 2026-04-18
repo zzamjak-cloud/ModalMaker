@@ -129,6 +129,7 @@ interface LayoutState {
   addNewNode: (parentId: string, kind: NodeKind, index?: number) => LayoutNode;
   moveNode: (nodeId: string, targetParentId: string, index?: number) => void;
   updateProps: (id: string, patch: Partial<NodeProps>) => void;
+  updateSizing: (id: string, patch: Partial<import("@/types/layout").SizingProps>) => void;
   updateTitle: (title: string) => void;
   updateViewport: (patch: Partial<import("@/types/layout").ViewportSettings>) => void;
   removeNode: (id: string) => void;
@@ -224,6 +225,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const node = findNode(draft.root, id);
         if (!node) return;
         node.props = { ...node.props, ...patch };
+      }),
+    ),
+
+  updateSizing: (id, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const node = findNode(draft.root, id);
+        if (!node) return;
+        node.sizing = { ...(node.sizing ?? {}), ...patch };
       }),
     ),
 

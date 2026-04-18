@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { SizeSection } from "./SizeSection";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -52,6 +53,8 @@ export function Inspector() {
       </div>
 
       <KindFields node={node} onChange={(patch) => updateProps(node.id, patch)} />
+      <div className="h-px bg-neutral-800" />
+      <SizeSection node={node} />
     </div>
   );
 }
