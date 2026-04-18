@@ -114,12 +114,17 @@ export type NodeProps =
   | IconProps
   | ModuleRefProps;
 
-// 모든 노드에 공용 적용되는 고정 크기 제어.
-// fixedSize=false(기본) 혹은 undefined면 자동 크기.
+// 모든 노드에 공용 적용되는 크기 제어.
+// 레거시 fixedSize=true는 widthFixed·heightFixed가 없을 때 양축 모두 고정으로 간주.
 export interface SizingProps {
+  /** @deprecated widthFixed/heightFixed로 대체 */
   fixedSize?: boolean;
-  width?: number;  // px, fixedSize=true일 때만 적용
-  height?: number; // px, fixedSize=true일 때만 적용
+  /** true면 width(px) 고정, false/undefined면 가로는 내용·플렉스에 따름 */
+  widthFixed?: boolean;
+  /** true면 height(px) 고정 */
+  heightFixed?: boolean;
+  width?: number;
+  height?: number;
 }
 
 export interface LayoutNode {
@@ -127,6 +132,12 @@ export interface LayoutNode {
   kind: NodeKind;
   props: NodeProps;
   sizing?: SizingProps; // 공용 고정 크기
+  /**
+   * Flex 컨테이너의 직계 자식일 때만 의미 있음.
+   * push-end: 주축 끝 방향으로 margin:auto (예: row에서 우측 정렬)
+   * push-start: 주축 시작 방향으로 margin:auto
+   */
+  flexMainAxis?: "push-end" | "push-start";
   style?: Partial<CSSProperties>;
   children?: LayoutNode[]; // container/foldable만 사용
 }

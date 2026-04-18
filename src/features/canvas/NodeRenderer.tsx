@@ -10,7 +10,14 @@ import { isContainerKind, type LayoutNode } from "@/types/layout";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
+import { ResizeHandles } from "./ResizeHandles";
 import { applySizing } from "./applySizing";
+import {
+  flexMainAxisMarginStyle,
+  justifyContentCss,
+  normalizeSizing,
+  type ParentFlexDirection,
+} from "@/lib/layoutSizing";
 import { getLucideIcon } from "./lucideLookup";
 import {
   CheckboxProps,
@@ -32,7 +39,7 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
     gridTemplateColumns: isGrid ? `repeat(${p.columns ?? 2}, minmax(0,1fr))` : undefined,
     gap: p.gap ?? 8,
     alignItems: p.align,
-    justifyContent: p.justify === "between" ? "space-between" : p.justify,
+    justifyContent: justifyContentCss(p.justify),
   };
   const fallback = p.padding ?? 12;
   if (p.uniformPadding === false) {
@@ -56,10 +63,17 @@ export function NodeRenderer({
   node,
   depth = 0,
   visitedModuleIds,
+  parentDirection = "column",
+  /** 루트·module-ref 직하위 등 부모가 flex가 아닐 때 false (기본 false) */
+  parentIsFlexContainer = false,
 }: {
   node: LayoutNode;
   depth?: number;
   visitedModuleIds?: Set<string>;
+  /** 직계 부모 flex/grid의 주축 방향 (자식 flex margin:auto에 사용) */
+  parentDirection?: ParentFlexDirection;
+  /** 직계 부모가 flex/grid 컨테이너일 때만 flexMainAxis 적용 */
+  parentIsFlexContainer?: boolean;
 }) {
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
@@ -114,6 +128,8 @@ export function NodeRenderer({
         node={mod.root}
         depth={depth + 1}
         visitedModuleIds={nextVisited}
+        parentDirection={parentDirection}
+        parentIsFlexContainer={false}
       />
     );
 
@@ -124,8 +140,13 @@ export function NodeRenderer({
         {...attributes}
         onClick={selectHandler}
         className={cn(outline, "relative px-1 py-0.5")}
-        style={applySizing(node)}
+        style={{
+          ...applySizing(node),
+          ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+          position: "relative",
+        }}
       >
+        <ResizeHandles nodeId={node.id} show={isSelected} />
         {content}
         <div className="pointer-events-none absolute -top-4 left-0 select-none text-[9px] uppercase tracking-wider text-neutral-500">
           {mod ? `⊚ ${mod.name}` : "⊚ ?"}
@@ -138,6 +159,9 @@ export function NodeRenderer({
     const p = node.props as ContainerProps & FoldableProps;
     const isFoldable = node.kind === "foldable";
     const open = !isFoldable || p.open !== false;
+    const rawDir = p.direction ?? "column";
+    const innerDir: ParentFlexDirection =
+      rawDir === "grid" ? "grid" : rawDir === "row" ? "row" : "column";
     return (
       <div
         ref={setNodeRef}
@@ -145,6 +169,9 @@ export function NodeRenderer({
         {...attributes}
         onClick={selectHandler}
         className={cn(outline, depth === 0 ? "min-w-[320px] bg-neutral-900/80" : "bg-neutral-900/40")}
+        style={
+          parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : undefined
+        }
       >
         {isFoldable && (
           <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300">
@@ -153,7 +180,11 @@ export function NodeRenderer({
           </div>
         )}
         {open && (
-          <div style={{ ...containerStyle(p), ...applySizing(node) }}>
+          <div
+            className="relative min-h-0 min-w-0"
+            style={{ ...containerStyle(p), ...applySizing(node), position: "relative" }}
+          >
+            <ResizeHandles nodeId={node.id} show={isSelected} />
             {node.children?.length ? (
               <>
                 <DropZone
@@ -167,6 +198,8 @@ export function NodeRenderer({
                       node={c}
                       depth={depth + 1}
                       visitedModuleIds={visitedModuleIds}
+                      parentDirection={innerDir}
+                      parentIsFlexContainer
                     />
                     <DropZone
                       containerId={node.id}
@@ -197,8 +230,13 @@ export function NodeRenderer({
       {...attributes}
       onClick={selectHandler}
       className={cn(outline, "px-1 py-0.5")}
-      style={applySizing(node)}
+      style={{
+        ...applySizing(node),
+        ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+        position: "relative",
+      }}
     >
+      <ResizeHandles nodeId={node.id} show={isSelected} />
       {renderLeaf(node, editingLeaf, setEditingLeaf)}
     </div>
   );
@@ -372,15 +410,16 @@ function TextLeaf({
     );
   }
 
-  const fixed = !!node.sizing?.fixedSize;
-  if (fixed) {
+  const { widthFixed, heightFixed, width, height } = normalizeSizing(node.sizing);
+  const fixedFrame = widthFixed || heightFixed;
+  if (fixedFrame) {
     return (
       <div
         className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
         style={{
           color: p.color,
-          width: node.sizing?.width,
-          height: node.sizing?.height,
+          width: widthFixed ? width : undefined,
+          height: heightFixed ? height : undefined,
           overflow: "hidden",
         }}
         onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}

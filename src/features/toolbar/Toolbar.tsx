@@ -9,9 +9,11 @@ import {
   FolderOpen,
   Download,
   Plus,
+  Minus,
   Bookmark,
   Layers,
   LayoutGrid,
+  Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
@@ -28,6 +30,7 @@ import { newId } from "@/lib/id";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { ViewportSelector } from "./ViewportSelector";
 import { ExportDialog } from "./ExportDialog";
+import { useCanvasViewportControlsStore } from "@/features/canvas/canvasViewportControlsStore";
 
 interface Props {
   onNewClick: () => void;
@@ -44,6 +47,7 @@ export function Toolbar({ onNewClick }: Props) {
   const setDocument = useLayoutStore((s) => s.setDocument);
   const mode = useLayoutStore((s) => s.mode);
   const setMode = useLayoutStore((s) => s.setMode);
+  const canvasZoom = useCanvasViewportControlsStore();
 
   const [status, setStatus] = useState<string | null>(null);
   const [savedDocs, setSavedDocs] = useState<NodeDocument[]>([]);
@@ -214,6 +218,47 @@ export function Toolbar({ onNewClick }: Props) {
           <div className="flex-1" />
 
           {status && <div className="text-xs text-sky-400">{status}</div>}
+
+          {mode === "canvas" && canvasZoom.active && (
+            <>
+              <div className="h-5 w-px bg-neutral-800" />
+              <div
+                className="flex flex-wrap items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-950 px-1 py-0.5"
+                role="group"
+                aria-label="캔버스 줌"
+              >
+                <button
+                  type="button"
+                  className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"
+                  title="10% 축소"
+                  onClick={() => canvasZoom.zoomOut()}
+                >
+                  <Minus size={14} />
+                </button>
+                <span className="min-w-[2.75rem] px-0.5 text-center text-[11px] tabular-nums text-neutral-400">
+                  {canvasZoom.percent}%
+                </span>
+                <button
+                  type="button"
+                  className="rounded p-1.5 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100"
+                  title="10% 확대"
+                  onClick={() => canvasZoom.zoomIn()}
+                >
+                  <Plus size={14} />
+                </button>
+                <div className="mx-0.5 h-4 w-px bg-neutral-700" />
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800 hover:text-sky-200"
+                  title="화면에 맞춤"
+                  onClick={() => canvasZoom.fit()}
+                >
+                  <Maximize2 size={12} />
+                  맞춤
+                </button>
+              </div>
+            </>
+          )}
 
           <ToolbarButton onClick={() => setOpenExport(true)} title="Export (MD / JSON / Mermaid)">
             <Download size={14} />

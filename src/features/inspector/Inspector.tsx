@@ -5,6 +5,7 @@ import { Package } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
+import { FlexChildSection } from "./FlexChildSection";
 import { IconPicker } from "./IconPicker";
 import type {
   ButtonProps,
@@ -78,6 +79,8 @@ export function Inspector() {
       <KindFields node={node} onChange={(patch) => updateProps(node.id, patch)} />
       <div className="h-px bg-neutral-800" />
       <SizeSection node={node} />
+      <div className="h-px bg-neutral-800" />
+      <FlexChildSection node={node} />
     </div>
   );
 }
@@ -98,8 +101,45 @@ function KindFields({
       // column: 가로=align(교차축), 세로=justify(주축) / row: 반대.
       const horizontalKey = isRow ? "justify" : "align";
       const verticalKey = isRow ? "align" : "justify";
-      const horizontalValue = (isRow ? p.justify : p.align) ?? "start";
-      const verticalValue = (isRow ? p.align : p.justify) ?? "start";
+      // UI 라벨 통일: 가로=좌/중/우/균등, 세로=상/중/하/균등 — justify 네 번째는 between, align 네 번째는 stretch
+      let horizontalValueRaw = (isRow ? p.justify : p.align) ?? "start";
+      let verticalValueRaw = (isRow ? p.align : p.justify) ?? "start";
+      if (horizontalKey === "justify" && horizontalValueRaw === "around") horizontalValueRaw = "between";
+      if (verticalKey === "justify" && verticalValueRaw === "around") verticalValueRaw = "between";
+
+      const horizontalJustifyOpts = [
+        { value: "start", label: "좌측" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "우측" },
+        { value: "between", label: "균등" },
+      ] as const;
+      const horizontalAlignOpts = [
+        { value: "start", label: "좌측" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "우측" },
+        { value: "stretch", label: "균등" },
+      ] as const;
+      const verticalJustifyOpts = [
+        { value: "start", label: "상단" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "하단" },
+        { value: "between", label: "균등" },
+      ] as const;
+      const verticalAlignOpts = [
+        { value: "start", label: "상단" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "하단" },
+        { value: "stretch", label: "균등" },
+      ] as const;
+
+      const horizontalOpts = horizontalKey === "justify" ? horizontalJustifyOpts : horizontalAlignOpts;
+      const verticalOpts = verticalKey === "justify" ? verticalJustifyOpts : verticalAlignOpts;
+      const horizontalValue = horizontalOpts.some((o) => o.value === horizontalValueRaw)
+        ? horizontalValueRaw
+        : "start";
+      const verticalValue = verticalOpts.some((o) => o.value === verticalValueRaw)
+        ? verticalValueRaw
+        : "start";
       return (
         <>
           <Field label="Label">
@@ -117,27 +157,17 @@ function KindFields({
               <NumberInput value={p.columns ?? 2} min={1} max={12} onChange={(v) => onChange({ columns: v })} />
             </Field>
           )}
-          <Field label="가로 정렬 (좌/중앙/우)">
+          <Field label="가로 정렬">
             <SegmentedControl
               value={horizontalValue}
-              options={[
-                { value: "start", label: "좌측" },
-                { value: "center", label: "중앙" },
-                { value: "end", label: "우측" },
-                { value: "between", label: "균등" },
-              ]}
+              options={horizontalOpts.map((o) => ({ value: o.value, label: o.label }))}
               onChange={(v) => onChange({ [horizontalKey]: v })}
             />
           </Field>
-          <Field label="세로 정렬 (상/중앙/하)">
+          <Field label="세로 정렬">
             <SegmentedControl
               value={verticalValue}
-              options={[
-                { value: "start", label: "상단" },
-                { value: "center", label: "중앙" },
-                { value: "end", label: "하단" },
-                { value: "stretch", label: "채움" },
-              ]}
+              options={verticalOpts.map((o) => ({ value: o.value, label: o.label }))}
               onChange={(v) => onChange({ [verticalKey]: v })}
             />
           </Field>

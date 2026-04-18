@@ -4,6 +4,7 @@
 import { useLayoutStore, currentPage, activeRoot } from "@/stores/layoutStore";
 import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 import { NodeRenderer } from "./NodeRenderer";
+import { CanvasViewport } from "./CanvasViewport";
 
 function resolveSize(v: ViewportSettings): { width: number; height: number } | null {
   if (v.preset === "free") return null;
@@ -36,7 +37,7 @@ export function Canvas() {
   const exitModuleEdit = useLayoutStore.getState().exitModuleEdit;
 
   const moduleBadge = editingModule ? (
-    <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
+    <div className="mb-2 flex shrink-0 items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200">
       <span>모듈 편집 중: {editingModule.name}</span>
       <button
         type="button"
@@ -48,29 +49,54 @@ export function Canvas() {
     </div>
   ) : null;
 
+  // 문서/페이지가 바뀌면 반드시 맞춤이 다시 돌아가야 함(해상도 문자열만으로는 Load 후 동일해 보일 수 있음)
+  const fitTrigger = [
+    state.document.id,
+    state.document.currentPageId,
+    viewport.preset,
+    size?.width ?? 0,
+    size?.height ?? 0,
+    safe,
+    state.editingModuleId ?? "",
+  ].join("|");
+
   if (!size) {
     return (
-      <div className="relative flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         {moduleBadge}
-        <NodeRenderer node={root} depth={0} />
+        <CanvasViewport
+          key={state.document.id}
+          className="min-h-0 w-full flex-1"
+          fitTrigger={fitTrigger}
+        >
+          <NodeRenderer node={root} depth={0} />
+        </CanvasViewport>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {moduleBadge}
-      <div
-        className="relative rounded-md bg-neutral-900/50 ring-1 ring-neutral-800"
-        style={{ width: size.width, height: size.height }}
+      <CanvasViewport
+        key={state.document.id}
+        className="min-h-0 w-full flex-1"
+        contentWidth={size.width}
+        contentHeight={size.height}
+        fitTrigger={fitTrigger}
       >
-        <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
-          {size.width} × {size.height}
+        <div
+          className="relative rounded-md bg-neutral-900/50 ring-1 ring-neutral-800"
+          style={{ width: size.width, height: size.height }}
+        >
+          <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
+            {size.width} × {size.height}
+          </div>
+          <div className="h-full w-full" style={{ padding: `${safe}%` }}>
+            <NodeRenderer node={root} depth={0} />
+          </div>
         </div>
-        <div className="h-full w-full" style={{ padding: `${safe}%` }}>
-          <NodeRenderer node={root} depth={0} />
-        </div>
-      </div>
+      </CanvasViewport>
     </div>
   );
 }

@@ -135,11 +135,11 @@ export default function App() {
           </aside>
 
           {/* 중앙: 캔버스 또는 노드 뷰 */}
-          <main className="flex flex-1 overflow-hidden bg-neutral-950">
+          <main className="flex min-h-0 flex-1 overflow-hidden bg-neutral-950">
             {mode === "node" ? (
               <NodeView />
             ) : (
-              <div className="flex flex-1 items-center justify-center overflow-auto p-8">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
                 <Canvas />
               </div>
             )}

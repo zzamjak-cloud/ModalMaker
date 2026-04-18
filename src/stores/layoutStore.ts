@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { produce } from "immer";
 import { newId } from "@/lib/id";
 import { migrateToV2 } from "@/lib/migrate";
+import { mergeSizingPatch } from "@/lib/layoutSizing";
 import {
   isContainerKind,
   type LayoutDocument,
@@ -261,6 +262,14 @@ export interface LayoutState {
   updateProps: (id: string, patch: Partial<NodeProps>) => void;
   updateTitle: (title: string) => void;
   updateViewport: (patch: Partial<ViewportSettings>) => void;
+  /** sizing·flexMainAxis 등 노드 프레임 필드 병합 */
+  patchNode: (
+    id: string,
+    patch: {
+      sizing?: Partial<SizingProps>;
+      flexMainAxis?: LayoutNode["flexMainAxis"] | null;
+    },
+  ) => void;
   updateSizing: (id: string, patch: Partial<SizingProps>) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
@@ -387,16 +396,27 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }),
     ),
 
-  updateSizing: (id, patch) =>
+  patchNode: (id, patch) =>
     set((s) =>
       commit(s, (draft) => {
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
         const node = findNode(root, id);
         if (!node) return;
-        node.sizing = { ...(node.sizing ?? {}), ...patch };
+        if (patch.sizing !== undefined) {
+          node.sizing = mergeSizingPatch(node.sizing ?? {}, patch.sizing);
+        }
+        if ("flexMainAxis" in patch) {
+          if (patch.flexMainAxis !== undefined && patch.flexMainAxis !== null) {
+            node.flexMainAxis = patch.flexMainAxis;
+          } else {
+            delete node.flexMainAxis;
+          }
+        }
       }),
     ),
+
+  updateSizing: (id, patch) => get().patchNode(id, { sizing: patch }),
 
   updateTitle: (title) =>
     set((s) =>
@@ -653,3 +673,12 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   setMode: (mode) => set({ mode }),
 }));
+
+/** 트리에서 id로 노드 조회 (인스펙터·리사이즈 핸들 등에서 사용) */
+export function findLayoutNode(root: LayoutNode, id: string): LayoutNode | null {
+  return findNode(root, id);
+}
+
+export function findLayoutParent(root: LayoutNode, childId: string): LayoutNode | null {
+  return findParent(root, childId);
+}
