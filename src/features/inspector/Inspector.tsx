@@ -7,6 +7,7 @@ import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
 import { FlexChildSection } from "./FlexChildSection";
 import { IconPicker } from "./IconPicker";
+import { InteractionSection } from "./InteractionSection";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -81,6 +82,8 @@ export function Inspector() {
       <SizeSection node={node} />
       <div className="h-px bg-neutral-800" />
       <FlexChildSection node={node} />
+      <div className="h-px bg-neutral-800" />
+      <InteractionSection node={node} />
     </div>
   );
 }
