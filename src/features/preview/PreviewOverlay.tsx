@@ -1,15 +1,71 @@
-// 프리뷰 풀스크린 오버레이 — 현재 페이지를 읽기 전용 인터렉티브로 렌더한다.
-// 히스토리 스택을 유지해 뒤로 가기 지원.
+// 프리뷰 풀스크린 오버레이 — 히스토리 스택 + 테마 선택 지원
 import { useState, useCallback, useEffect } from "react";
-import { X, ChevronLeft, RotateCcw } from "lucide-react";
+import { X, ChevronLeft, RotateCcw, Palette } from "lucide-react";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { PreviewRenderer } from "./PreviewRenderer";
+import { ThemeProvider, useTheme } from "./ThemeContext";
+import { useThemeStore } from "./themeStore";
+import { THEME_LABELS, type ThemeName, type ThemeTokens } from "./themes";
 import type { PreviewContext } from "./previewRuntime";
 
-export function PreviewOverlay() {
+const THEME_OPTIONS: ThemeName[] = ["os", "dark", "light", "warm", "ocean"];
+
+function ThemePicker() {
+  const { theme, setTheme } = useThemeStore();
+  const [open, setOpen] = useState(false);
+  const t = useTheme();
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded-md border border-neutral-800 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
+        title="테마 변경"
+      >
+        <Palette size={12} />
+        {THEME_LABELS[theme]}
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full z-50 mt-1 min-w-[110px] rounded-md border border-neutral-800 bg-neutral-900 py-1 shadow-xl"
+          onMouseLeave={() => setOpen(false)}
+        >
+          {THEME_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => { setTheme(opt); setOpen(false); }}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-neutral-800 ${theme === opt ? "text-sky-400" : "text-neutral-200"}`}
+            >
+              <span
+                className="h-3 w-3 rounded-full border border-neutral-700"
+                style={{ background: previewDot(opt, t) }}
+              />
+              {THEME_LABELS[opt]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 테마 미리보기 dot 색상 — 현재 토큰 기반
+function previewDot(opt: ThemeName, current: ThemeTokens): string {
+  const map: Record<ThemeName, string> = {
+    os: current.accentBg,
+    dark: "#171717",
+    light: "#f5f5f5",
+    warm: "#f59e0b",
+    ocean: "#0284c7",
+  };
+  return map[opt];
+}
+
+function PreviewContent() {
   const document = useLayoutStore((s) => s.document);
   const setMode = useLayoutStore((s) => s.setMode);
   const initialPageId = document.currentPageId;
+  const t = useTheme();
 
   const [currentPageId, setCurrentPageId] = useState(initialPageId);
   const [history, setHistory] = useState<string[]>([]);
@@ -37,7 +93,7 @@ export function PreviewOverlay() {
     });
   }, []);
 
-  // 인터렉션 close 액션: 프리뷰를 종료하지 않고 뒤로 가거나 지정 페이지로 이동
+  // 인터렉션 close 액션: 프리뷰 종료 대신 뒤로 가기 또는 지정 페이지 이동
   const close = useCallback(
     (targetPageId?: string) => {
       if (targetPageId && document.pages.some((p) => p.id === targetPageId)) {
@@ -49,6 +105,7 @@ export function PreviewOverlay() {
     },
     [back, document.pages, currentPageId],
   );
+
   const reset = useCallback(() => {
     setCurrentPageId(initialPageId);
     setHistory([]);
@@ -88,6 +145,7 @@ export function PreviewOverlay() {
         </button>
         <div className="mx-2 truncate text-sm text-neutral-200">{page?.title ?? "(빈 페이지)"}</div>
         <div className="flex-1" />
+        <ThemePicker />
         <button
           onClick={exitPreview}
           className="inline-flex items-center gap-1 rounded-md border border-neutral-800 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
@@ -97,10 +155,21 @@ export function PreviewOverlay() {
         </button>
       </div>
 
-      {/* 렌더 영역 */}
-      <div className="flex flex-1 items-start justify-center overflow-auto bg-neutral-950 p-8">
-        {page ? <PreviewRenderer node={page.root} ctx={ctx} /> : null}
+      {/* 렌더 영역 — 테마 배경 적용 */}
+      <div
+        className="flex flex-1 items-start justify-center overflow-auto p-8"
+        style={{ backgroundColor: t.canvasBg }}
+      >
+        {page ? <PreviewRenderer node={page.root} ctx={ctx} depth={0} /> : null}
       </div>
     </div>
+  );
+}
+
+export function PreviewOverlay() {
+  return (
+    <ThemeProvider>
+      <PreviewContent />
+    </ThemeProvider>
   );
 }

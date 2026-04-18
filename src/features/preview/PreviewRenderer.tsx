@@ -1,10 +1,9 @@
-// 프리뷰용 재귀 렌더러 — 편집 기능 제거 + 인터렉션 이벤트 부착.
-// 기본 시각 표현은 NodeRenderer와 일치시키되 최소 구현을 유지.
+// 프리뷰용 재귀 렌더러 — 편집 기능 제거 + 인터렉션 이벤트 부착 + 테마 토큰 적용.
 import { useState, useMemo } from "react";
-import { cn } from "@/lib/cn";
 import { getLucideIcon } from "@/features/canvas/lucideLookup";
 import { applySizing } from "@/features/canvas/applySizing";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { useTheme } from "./ThemeContext";
 import {
   hasDisabledBehavior,
   runActions,
@@ -25,7 +24,7 @@ import type {
   TextProps,
 } from "@/types/layout";
 
-function containerStyle(p: ContainerProps): React.CSSProperties {
+function containerLayoutStyle(p: ContainerProps): React.CSSProperties {
   const isGrid = p.direction === "grid";
   const base: React.CSSProperties = {
     display: isGrid ? "grid" : "flex",
@@ -47,7 +46,7 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
   if (p.borderStyle && p.borderStyle !== "none") {
     base.borderStyle = p.borderStyle;
     base.borderWidth = p.borderWidth ?? 1;
-    base.borderColor = p.borderColor ?? "#525252";
+    base.borderColor = p.borderColor;
   }
   return base;
 }
@@ -56,11 +55,14 @@ export function PreviewRenderer({
   node,
   ctx,
   visitedModuleIds,
+  depth = 0,
 }: {
   node: LayoutNode;
   ctx: PreviewContext;
   visitedModuleIds?: Set<string>;
+  depth?: number;
 }) {
+  const t = useTheme();
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
   const disabled = hasDisabledBehavior(node.interactions);
@@ -72,7 +74,7 @@ export function PreviewRenderer({
 
   const onClick = (e: React.MouseEvent) => {
     if (disabled) return;
-    e.stopPropagation(); // 레이어 뎁스 우선순위: 상위로 전파 X
+    e.stopPropagation();
     runActions(node.interactions ?? [], "click", ctx);
   };
   const onMouseEnter = () => {
@@ -80,10 +82,7 @@ export function PreviewRenderer({
     setHover(true);
     runActions(node.interactions ?? [], "hover", ctx);
   };
-  const onMouseLeave = () => {
-    setHover(false);
-    setPressed(false);
-  };
+  const onMouseLeave = () => { setHover(false); setPressed(false); };
   const onMouseDown = () => {
     if (disabled) return;
     setPressed(true);
@@ -108,11 +107,11 @@ export function PreviewRenderer({
     const nextVisited = new Set(visitedModuleIds ?? []);
     const isCircular = nextVisited.has(p.moduleId);
     nextVisited.add(p.moduleId);
-    if (!mod) return <span className="text-xs text-rose-400">[모듈 없음]</span>;
-    if (isCircular) return <span className="text-xs text-amber-400">↻ 순환</span>;
+    if (!mod) return <span style={{ fontSize: 12, color: "#f87171" }}>[모듈 없음]</span>;
+    if (isCircular) return <span style={{ fontSize: 12, color: "#fbbf24" }}>↻ 순환</span>;
     return (
       <div style={{ ...sizing, ...stateStyle }} {...handlerProps}>
-        <PreviewRenderer node={mod.root} ctx={ctx} visitedModuleIds={nextVisited} />
+        <PreviewRenderer node={mod.root} ctx={ctx} visitedModuleIds={nextVisited} depth={depth} />
       </div>
     );
   }
@@ -121,18 +120,39 @@ export function PreviewRenderer({
   if (node.kind === "container" || node.kind === "foldable") {
     const p = node.props as ContainerProps & FoldableProps;
     const open = node.kind !== "foldable" || p.open !== false;
+    const bg = depth === 0 ? t.surfaceBg : t.surfaceBg2;
     return (
-      <div style={{ ...containerStyle(p), ...sizing, ...stateStyle }} {...handlerProps}>
+      <div
+        style={{
+          ...containerLayoutStyle(p),
+          ...sizing,
+          ...stateStyle,
+          backgroundColor: p.borderColor ? undefined : bg,
+          // borderColor prop이 명시된 경우 컨테이너 배경은 별도 래퍼로 분리하지 않음
+          background: bg,
+        }}
+        {...handlerProps}
+      >
         {node.kind === "foldable" && (
-          <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300">
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            borderBottom: `1px solid ${t.borderColor}`,
+            padding: "6px 12px",
+            fontSize: 12, fontWeight: 500, color: t.textSecondary,
+          }}>
             <span>{open ? "▾" : "▸"}</span>
             <span>{p.title ?? "Section"}</span>
           </div>
         )}
-        {open &&
-          node.children?.map((c) => (
-            <PreviewRenderer key={c.id} node={c} ctx={ctx} visitedModuleIds={visitedModuleIds} />
-          ))}
+        {open && node.children?.map((c) => (
+          <PreviewRenderer
+            key={c.id}
+            node={c}
+            ctx={ctx}
+            visitedModuleIds={visitedModuleIds}
+            depth={depth + 1}
+          />
+        ))}
       </div>
     );
   }
@@ -142,28 +162,47 @@ export function PreviewRenderer({
     switch (node.kind) {
       case "text": {
         const p = node.props as TextProps;
-        const size = { sm: "text-xs", md: "text-sm", lg: "text-base", xl: "text-lg", "2xl": "text-2xl" }[p.size ?? "md"];
-        const weight = { normal: "font-normal", medium: "font-medium", bold: "font-bold" }[p.weight ?? "normal"];
+        const fontSize = { sm: 12, md: 14, lg: 16, xl: 18, "2xl": 24 }[p.size ?? "md"];
+        const fontWeight = { normal: 400, medium: 500, bold: 700 }[p.weight ?? "normal"];
         return (
-          <span className={cn(size, weight, "text-neutral-100")} style={{ color: p.color }}>
+          <span style={{ fontSize, fontWeight, color: p.color ?? t.textPrimary }}>
             {p.text || "Text"}
           </span>
         );
       }
       case "button": {
         const p = node.props as ButtonProps;
-        const variantClass = {
-          primary: "bg-sky-500 text-white hover:bg-sky-400",
-          secondary: "bg-neutral-700 text-neutral-100 hover:bg-neutral-600",
-          destructive: "bg-rose-600 text-white hover:bg-rose-500",
-          ghost: "bg-transparent text-neutral-300 border border-neutral-700 hover:bg-neutral-800",
-        }[p.variant ?? "primary"];
-        const sizeClass = { sm: "px-2 py-1 text-xs", md: "px-3 py-1.5 text-sm", lg: "px-4 py-2 text-base" }[p.size ?? "md"];
+        const variantStyle: React.CSSProperties = (() => {
+          switch (p.variant ?? "primary") {
+            case "primary":
+              return { backgroundColor: t.accentBg, color: t.accentText };
+            case "secondary":
+              return { backgroundColor: t.secondaryBg, color: t.secondaryText };
+            case "destructive":
+              return { backgroundColor: t.destructiveBg, color: t.destructiveText };
+            case "ghost":
+              return { backgroundColor: t.ghostBg, color: t.ghostText, border: `1px solid ${t.ghostBorder}` };
+            default:
+              return {};
+          }
+        })();
+        const sizeStyle: React.CSSProperties = {
+          sm: { padding: "4px 8px", fontSize: 12 },
+          md: { padding: "6px 12px", fontSize: 14 },
+          lg: { padding: "8px 16px", fontSize: 16 },
+        }[p.size ?? "md"] ?? { padding: "6px 12px", fontSize: 14 };
         const Icon = getLucideIcon(p.iconName);
         const pos = p.iconPosition ?? "left";
-        const iconPx = { sm: 12, md: 14, lg: 16 }[p.size ?? "md"];
+        const iconPx = { sm: 12, md: 14, lg: 16 }[p.size ?? "md"] ?? 14;
         return (
-          <button type="button" className={cn("inline-flex items-center gap-1.5 rounded-md font-medium transition", variantClass, sizeClass)}>
+          <button
+            type="button"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              borderRadius: 6, fontWeight: 500, cursor: "pointer",
+              border: "none", ...variantStyle, ...sizeStyle,
+            }}
+          >
             {Icon && pos === "left" && <Icon size={iconPx} />}
             <span>{p.label}</span>
             {Icon && pos === "right" && <Icon size={iconPx} />}
@@ -173,13 +212,22 @@ export function PreviewRenderer({
       case "input": {
         const p = node.props as InputProps;
         return (
-          <div className="flex flex-col gap-1">
-            {p.label && <label className="text-xs text-neutral-400">{p.label}</label>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {p.label && (
+              <label style={{ fontSize: 12, color: t.textSecondary }}>{p.label}</label>
+            )}
             <input
               type={p.type ?? "text"}
               placeholder={p.placeholder}
               defaultValue={p.value}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+              style={{
+                width: "100%", borderRadius: 6,
+                border: `1px solid ${t.inputBorder}`,
+                backgroundColor: t.inputBg,
+                color: t.textPrimary,
+                padding: "6px 10px", fontSize: 14,
+                outline: "none",
+              }}
             />
           </div>
         );
@@ -187,8 +235,8 @@ export function PreviewRenderer({
       case "checkbox": {
         const p = node.props as CheckboxProps;
         return (
-          <label className="flex items-center gap-2 text-sm text-neutral-200">
-            <input type="checkbox" defaultChecked={p.checked ?? false} className="h-4 w-4 accent-sky-500" />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: t.textPrimary, cursor: "pointer" }}>
+            <input type="checkbox" defaultChecked={p.checked ?? false} style={{ width: 16, height: 16, accentColor: t.accentBg }} />
             {p.label}
           </label>
         );
@@ -197,10 +245,10 @@ export function PreviewRenderer({
         const p = node.props as ProgressProps;
         const pct = Math.max(0, Math.min(100, ((p.value ?? 0) / (p.max ?? 100)) * 100));
         return (
-          <div className="w-full">
-            {p.label && <div className="mb-1 text-xs text-neutral-400">{p.label}</div>}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-              <div className="h-full bg-sky-500 transition-all" style={{ width: `${pct}%` }} />
+          <div style={{ width: "100%" }}>
+            {p.label && <div style={{ marginBottom: 4, fontSize: 12, color: t.textSecondary }}>{p.label}</div>}
+            <div style={{ height: 8, width: "100%", overflow: "hidden", borderRadius: 9999, backgroundColor: t.borderColor }}>
+              <div style={{ height: "100%", backgroundColor: t.accentBg, width: `${pct}%`, transition: "width 0.2s" }} />
             </div>
           </div>
         );
@@ -210,21 +258,17 @@ export function PreviewRenderer({
         const orientation = p.orientation ?? "horizontal";
         const style = p.style ?? "solid";
         const thickness = p.thickness ?? 1;
-        const color = p.color ?? "#525252";
+        const color = p.color ?? t.borderColor;
         if (orientation === "vertical") {
-          return (
-            <div style={{ borderLeftWidth: thickness, borderLeftStyle: style, borderLeftColor: color, minHeight: 24, alignSelf: "stretch" }} />
-          );
+          return <div style={{ borderLeftWidth: thickness, borderLeftStyle: style, borderLeftColor: color, minHeight: 24, alignSelf: "stretch" }} />;
         }
-        return (
-          <div style={{ borderTopWidth: thickness, borderTopStyle: style, borderTopColor: color, width: "100%" }} />
-        );
+        return <div style={{ borderTopWidth: thickness, borderTopStyle: style, borderTopColor: color, width: "100%" }} />;
       }
       case "icon": {
         const p = node.props as IconProps;
         const Comp = getLucideIcon(p.name);
-        if (!Comp) return <span className="text-xs text-neutral-500">?</span>;
-        return <Comp size={p.size ?? 20} color={p.color ?? "currentColor"} />;
+        if (!Comp) return <span style={{ fontSize: 12, color: t.textMuted }}>?</span>;
+        return <Comp size={p.size ?? 20} color={p.color ?? t.textPrimary} />;
       }
       default:
         return null;
