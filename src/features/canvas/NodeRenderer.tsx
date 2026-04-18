@@ -9,8 +9,8 @@ import { cn } from "@/lib/cn";
 import { isContainerKind, type LayoutNode } from "@/types/layout";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
+import { ButtonLeaf } from "./ButtonLeaf";
 import {
-  ButtonProps,
   CheckboxProps,
   ContainerProps,
   FoldableProps,
@@ -47,15 +47,15 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
 
-  // Text 인라인 편집 상태 - 활성 시 드래그 비활성
-  const [editingText, setEditingText] = useState(false);
+  // 리프 인라인 편집 상태 (Text/Button 공유) - 활성 시 드래그 비활성
+  const [editingLeaf, setEditingLeaf] = useState(false);
 
   const isSelected = selectedId === node.id;
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
     data: { source: "canvas", nodeId: node.id },
-    disabled: depth === 0 || editingText, // 루트 or 편집 중에는 드래그 금지
+    disabled: depth === 0 || editingLeaf, // 루트 or 편집 중에는 드래그 금지
   });
 
   const outline = cn(
@@ -131,7 +131,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       onClick={selectHandler}
       className={cn(outline, "px-1 py-0.5")}
     >
-      {renderLeaf(node, editingText, setEditingText)}
+      {renderLeaf(node, editingLeaf, setEditingLeaf)}
     </div>
   );
 }
@@ -144,21 +144,8 @@ function renderLeaf(
   switch (node.kind) {
     case "text":
       return <TextLeaf node={node} editing={editing} setEditing={setEditing} />;
-    case "button": {
-      const p = node.props as ButtonProps;
-      const variant = {
-        primary: "bg-sky-500 text-white hover:bg-sky-400",
-        secondary: "bg-neutral-700 text-neutral-100 hover:bg-neutral-600",
-        destructive: "bg-rose-600 text-white hover:bg-rose-500",
-        ghost: "bg-transparent text-neutral-300 border border-neutral-700 hover:bg-neutral-800",
-      }[p.variant ?? "primary"];
-      const size = {
-        sm: "px-2 py-1 text-xs",
-        md: "px-3 py-1.5 text-sm",
-        lg: "px-4 py-2 text-base",
-      }[p.size ?? "md"];
-      return <button className={cn("rounded-md font-medium transition", variant, size)}>{p.label}</button>;
-    }
+    case "button":
+      return <ButtonLeaf node={node} editing={editing} setEditing={setEditing} />;
     case "input": {
       const p = node.props as InputProps;
       return (
