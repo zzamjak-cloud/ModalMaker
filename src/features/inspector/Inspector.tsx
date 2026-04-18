@@ -396,6 +396,29 @@ function KindFields({
               onChange={(v) => onChange({ contentAlign: v })}
             />
           </Field>
+          <Field label="탭 그룹 ID">
+            <TextInput
+              value={p.tabGroupId ?? ""}
+              onChange={(v) => onChange({ tabGroupId: v || undefined })}
+            />
+          </Field>
+          {p.tabGroupId && (
+            <>
+              <Field label="기본 활성">
+                <Toggle
+                  value={p.tabDefaultActive ?? false}
+                  onChange={(v) => onChange({ tabDefaultActive: v })}
+                />
+              </Field>
+              <Field label="비활성 스타일">
+                <Select
+                  value={p.tabInactiveVariant ?? "ghost"}
+                  options={["primary", "secondary", "destructive", "ghost", "plain"]}
+                  onChange={(v) => onChange({ tabInactiveVariant: v })}
+                />
+              </Field>
+            </>
+          )}
         </>
       );
     }
