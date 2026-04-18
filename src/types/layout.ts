@@ -5,7 +5,6 @@ import type { CSSProperties } from "react";
 
 export type NodeKind =
   | "container" // 자식을 담는 래퍼. direction으로 row/column/grid 선택
-  | "panel-layout" // 5-슬롯 고정 패널 레이아웃 (header/left/main/right/footer)
   | "text"
   | "button"
   | "input"
@@ -15,7 +14,7 @@ export type NodeKind =
   | "foldable"; // 접힘 가능한 섹션. children 보유
 
 // 컨테이너/폴딩만 자식을 가진다. 그 외는 leaf.
-export const CONTAINER_KINDS: NodeKind[] = ["container", "foldable", "panel-layout"];
+export const CONTAINER_KINDS: NodeKind[] = ["container", "foldable"];
 
 export function isContainerKind(kind: NodeKind): boolean {
   return CONTAINER_KINDS.includes(kind);
@@ -42,9 +41,6 @@ export interface ContainerProps {
   borderStyle?: "none" | "solid" | "dashed" | "dotted"; // 기본 "none"
   borderWidth?: number; // 기본 1, 허용 범위 0~8
   borderColor?: string; // 기본 "#525252"
-
-  // panel-layout 슬롯 container 1단 자식일 때만 유효한 고정 영역 표시
-  pinned?: "none" | "top" | "bottom"; // 기본 "none"
 }
 
 export interface TextProps {
@@ -91,21 +87,8 @@ export interface SplitProps {
   label?: string;
 }
 
-export interface PanelLayoutProps {
-  showHeader?: boolean;   // 기본 true
-  showFooter?: boolean;   // 기본 false
-  showLeft?: boolean;     // 기본 true
-  showRight?: boolean;    // 기본 false
-  headerHeight?: number;  // 기본 48
-  footerHeight?: number;  // 기본 40
-  leftWidth?: number;     // 기본 220
-  rightWidth?: number;    // 기본 260
-  label?: string;         // 기본 "Panel Layout"
-}
-
 export type NodeProps =
   | ContainerProps
-  | PanelLayoutProps
   | TextProps
   | ButtonProps
   | InputProps

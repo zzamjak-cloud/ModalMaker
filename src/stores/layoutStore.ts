@@ -24,17 +24,6 @@ export function createNode(kind: NodeKind, overrides: Partial<LayoutNode> = {}):
     children: isContainerKind(kind) ? [] : undefined,
     ...overrides,
   };
-  if (kind === "panel-layout" && (!overrides.children || overrides.children.length === 0)) {
-    // 슬롯 container를 고정 5개 생성. 인덱스 = 슬롯 ID.
-    // 0=header, 1=left, 2=main, 3=right, 4=footer
-    base.children = [
-      createNode("container", { props: { direction: "row",    gap: 8, padding: 12, label: "Header" } }),
-      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Left"   } }),
-      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Main"   } }),
-      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Right"  } }),
-      createNode("container", { props: { direction: "row",    gap: 8, padding: 12, label: "Footer" } }),
-    ];
-  }
   return base;
 }
 
@@ -42,18 +31,6 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
   switch (kind) {
     case "container":
       return { direction: "column", gap: 8, padding: 12, label: "Container" };
-    case "panel-layout":
-      return {
-        showHeader: true,
-        showFooter: false,
-        showLeft: true,
-        showRight: false,
-        headerHeight: 48,
-        footerHeight: 40,
-        leftWidth: 220,
-        rightWidth: 260,
-        label: "Panel Layout",
-      };
     case "foldable":
       return { title: "Section", open: true };
     case "text":
@@ -190,7 +167,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const parent = findNode(draft.root, parentId);
         if (!parent || !isContainerKind(parent.kind)) return;
-        if (parent.kind === "panel-layout") return; // 5개 슬롯이 고정이므로 직접 자식 추가 금지
         parent.children ??= [];
         const i = index ?? parent.children.length;
         parent.children.splice(i, 0, node);
@@ -210,7 +186,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const sourceParent = findParent(draft.root, nodeId);
         const target = findNode(draft.root, targetParentId);
         if (!sourceParent || !target || !isContainerKind(target.kind)) return;
-        if (target.kind === "panel-layout") return; // panel-layout 직접 자식 위치 변경 금지
         // 자기 자신의 자손으로 이동하는 것 방지
         if (isAncestor(findNode(draft.root, nodeId)!, targetParentId)) return;
         const removed = removeFromParent(sourceParent, nodeId);
@@ -320,17 +295,4 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
     sizing: node.sizing ? { ...node.sizing } : undefined,
     children: node.children?.map(cloneWithNewIds),
   };
-}
-
-// 주어진 childId가 panel-layout의 직접 자식(슬롯 container)이면 인덱스를 리턴.
-// 그 외(일반 container 자식, 슬롯 container 내부 자식 등)는 null.
-export function findPanelLayoutSlot(
-  root: LayoutNode,
-  childId: string,
-): { slotIndex: 0 | 1 | 2 | 3 | 4; parent: LayoutNode } | null {
-  const parent = findParent(root, childId);
-  if (!parent || parent.kind !== "panel-layout") return null;
-  const idx = parent.children?.findIndex((c) => c.id === childId) ?? -1;
-  if (idx < 0 || idx > 4) return null;
-  return { slotIndex: idx as 0 | 1 | 2 | 3 | 4, parent };
 }

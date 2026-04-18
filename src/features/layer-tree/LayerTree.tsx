@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
+import { useLayoutStore } from "@/stores/layoutStore";
 import type { LayoutNode } from "@/types/layout";
 
 export function LayerTree() {
@@ -31,9 +31,6 @@ function TreeNode({
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
   const removeNode = useLayoutStore((s) => s.removeNode);
-  const doc = useLayoutStore((s) => s.document);
-  const slotInfo = findPanelLayoutSlot(doc.root, node.id);
-  const isSlot = !!slotInfo;
 
   const isSelected = selectedId === node.id;
   const hasChildren = !!node.children?.length;
@@ -63,7 +60,7 @@ function TreeNode({
         </button>
         <span className="flex-1 truncate">{label}</span>
         <span className="opacity-0 transition group-hover:opacity-100 flex items-center gap-0.5">
-          {!isRoot && !isSlot && (
+          {!isRoot && (
             <>
               <IconButton
                 title="위로"
@@ -122,8 +119,6 @@ function nodeLabel(node: LayoutNode): string {
   switch (node.kind) {
     case "container":
       return `◼ ${(node.props as { label?: string }).label ?? "Container"}`;
-    case "panel-layout":
-      return `▦ ${(node.props as { label?: string }).label ?? "Panel Layout"}`;
     case "foldable":
       return `▸ ${(node.props as { title?: string }).title ?? "Section"}`;
     case "text":

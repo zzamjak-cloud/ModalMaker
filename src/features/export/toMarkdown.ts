@@ -21,10 +21,6 @@ function nodeLine(node: LayoutNode): string {
               : "";
       return `[Container: ${label}${hint}]`;
     }
-    case "panel-layout": {
-      const p = node.props as { label?: string };
-      return `[Panel Layout: ${p.label ?? "Panel Layout"}]`;
-    }
     case "foldable": {
       const p = node.props as { title?: string };
       return `[Foldable: ${p.title ?? "Section"}]`;

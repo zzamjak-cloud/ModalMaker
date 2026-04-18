@@ -2,9 +2,8 @@
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
+import { useLayoutStore } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
-import { PanelLayoutSection } from "./PanelLayoutSection";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -25,7 +24,6 @@ export function Inspector() {
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
 
   const node = useMemo(() => (selectedId ? findNode(doc.root, selectedId) : null), [doc, selectedId]);
-  const isSlot = !!(node && findPanelLayoutSlot(doc.root, node.id));
 
   if (!node) {
     return (
@@ -45,10 +43,10 @@ export function Inspector() {
           {node.kind}
         </div>
         <div className="flex gap-1">
-          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id || isSlot}>
+          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id}>
             복제
           </Btn>
-          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id || isSlot} danger>
+          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id} danger>
             삭제
           </Btn>
         </div>
@@ -69,14 +67,6 @@ function KindFields({
   onChange: (patch: Record<string, unknown>) => void;
 }) {
   switch (node.kind) {
-    case "panel-layout": {
-      return (
-        <PanelLayoutSection
-          node={node}
-          onChange={(patch) => onChange(patch as Record<string, unknown>)}
-        />
-      );
-    }
     case "container": {
       const p = node.props as ContainerProps;
       const direction = p.direction ?? "column";
@@ -170,7 +160,6 @@ function KindFields({
               </Field>
             </>
           )}
-          <PinField node={node} onChange={onChange} />
         </>
       );
     }
@@ -432,46 +421,6 @@ function findNode(root: LayoutNode, id: string): LayoutNode | null {
     if (hit) return hit;
   }
   return null;
-}
-
-function findParent(root: LayoutNode, childId: string): LayoutNode | null {
-  if (!root.children) return null;
-  for (const c of root.children) {
-    if (c.id === childId) return root;
-    const hit = findParent(c, childId);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-function PinField({
-  node,
-  onChange,
-}: {
-  node: LayoutNode;
-  onChange: (patch: Record<string, unknown>) => void;
-}) {
-  const doc = useLayoutStore((s) => s.document);
-  // 슬롯 container의 1단 자식 container만 pinned가 유효
-  const parent = findParent(doc.root, node.id);
-  const grand = parent ? findParent(doc.root, parent.id) : null;
-  const isInsideSlot = !!(grand && grand.kind === "panel-layout");
-  if (!isInsideSlot) return null;
-
-  const p = node.props as ContainerProps;
-  return (
-    <Field label="Pin">
-      <SegmentedControl
-        value={p.pinned ?? "none"}
-        options={[
-          { value: "none", label: "없음" },
-          { value: "top", label: "상단" },
-          { value: "bottom", label: "하단" },
-        ]}
-        onChange={(v) => onChange({ pinned: v })}
-      />
-    </Field>
-  );
 }
 
 // === 공용 폼 프리미티브 ===
