@@ -11,6 +11,7 @@ import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
 import { applySizing } from "./applySizing";
+import { PanelLayoutRenderer } from "./PanelLayoutRenderer";
 import {
   CheckboxProps,
   ContainerProps,
@@ -76,6 +77,10 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
     e.stopPropagation();
     select(node.id);
   };
+
+  if (node.kind === "panel-layout") {
+    return <PanelLayoutRenderer node={node} depth={depth} />;
+  }
 
   if (isContainerKind(node.kind)) {
     const p = node.props as ContainerProps & FoldableProps;
