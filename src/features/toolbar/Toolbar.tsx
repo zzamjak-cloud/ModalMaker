@@ -88,12 +88,8 @@ export function Toolbar({ onNewClick }: Props) {
   }
 
   function load(d: LayoutDocument) {
-    setDocument({
-      ...d,
-      id: newId("doc"),
-      root: cloneWithNewIds(d.root),
-      updatedAt: Date.now(),
-    });
+    // id/원본 root id를 그대로 유지해야 이후 Save가 '원본 덮어쓰기'로 동작한다.
+    setDocument(d);
     setOpenLoad(false);
   }
 
