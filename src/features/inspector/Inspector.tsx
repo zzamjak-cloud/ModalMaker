@@ -18,6 +18,7 @@ import type {
   InputProps,
   LayoutNode,
   ModuleRefProps,
+  NodeProps,
   ProgressProps,
   SplitProps,
   TextProps,
@@ -31,6 +32,8 @@ export function Inspector() {
   const removeNode = useLayoutStore((s) => s.removeNode);
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
   const registerModule = useLayoutStore((s) => s.registerModule);
+  const selectedIds = useLayoutStore((s) => s.selectedIds);
+  const updatePropsMulti = useLayoutStore((s) => s.updatePropsMulti);
 
   const node = useMemo(
     () => (selectedId && root ? findNode(root, selectedId) : null),
@@ -44,6 +47,67 @@ export function Inspector() {
           Inspector
         </div>
         캔버스에서 컴포넌트를 선택하세요.
+      </div>
+    );
+  }
+
+  // 멀티 선택 모드 (2개 이상 선택 시)
+  if (selectedIds.length > 1 && root) {
+    const selectedNodes = selectedIds
+      .map((id) => findNode(root, id))
+      .filter((n): n is LayoutNode => n !== null);
+    const allSameKind = selectedNodes.length > 0 &&
+      selectedNodes.every((n) => n.kind === selectedNodes[0].kind);
+    const kind = allSameKind ? selectedNodes[0].kind : null;
+
+    // 혼재 값 계산: 모든 노드가 동일하면 그 값, 아니면 undefined
+    function getMixed<T>(getter: (n: LayoutNode) => T): T | undefined {
+      const vals = selectedNodes.map(getter);
+      return vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+    }
+
+    // 버튼 대표 노드 구성 (혼재 값은 undefined → 빈칸으로 표시)
+    const repNode: LayoutNode | null = (allSameKind && kind === "button" && selectedNodes.length > 0)
+      ? {
+          ...selectedNodes[0],
+          props: {
+            label: getMixed((n) => (n.props as ButtonProps).label) ?? "",
+            variant: getMixed((n) => (n.props as ButtonProps).variant) ?? (selectedNodes[0].props as ButtonProps).variant,
+            size: getMixed((n) => (n.props as ButtonProps).size) ?? (selectedNodes[0].props as ButtonProps).size,
+            contentAlign: getMixed((n) => (n.props as ButtonProps).contentAlign) ?? (selectedNodes[0].props as ButtonProps).contentAlign,
+            tabGroupId: getMixed((n) => (n.props as ButtonProps).tabGroupId),
+            tabInactiveVariant: getMixed((n) => (n.props as ButtonProps).tabInactiveVariant),
+          } as ButtonProps,
+        }
+      : null;
+
+    // 변경 적용: 빈 문자열은 skip (혼재 표시용 빈값은 전파 안 함)
+    const onChangeMulti = (patch: Record<string, unknown>) => {
+      const filtered = Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => v !== "" && v !== undefined),
+      );
+      if (Object.keys(filtered).length > 0) {
+        updatePropsMulti(selectedIds, filtered as Partial<NodeProps>);
+      }
+    };
+
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-400">
+          {selectedIds.length}개 선택됨{kind ? ` (${kind})` : " — 다른 종류 혼재"}
+        </div>
+        {repNode && (
+          <>
+            <KindFields node={repNode} onChange={onChangeMulti} />
+            <div className="h-px bg-neutral-800" />
+            <SizeSection node={selectedNodes[0]} />
+          </>
+        )}
+        {!repNode && (
+          <div className="text-xs text-neutral-500">
+            같은 종류 노드를 선택하면 일괄 편집할 수 있습니다.
+          </div>
+        )}
       </div>
     );
   }
@@ -214,6 +278,34 @@ function KindFields({
               </Field>
             </>
           )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-neutral-400">배경 농도</span>
+              {p.backgroundOpacity !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ backgroundOpacity: undefined })}
+                  className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                  title="테마 기본값으로 재설정"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={p.backgroundOpacity ?? 80}
+                onChange={(e) => onChange({ backgroundOpacity: Number(e.target.value) })}
+                className="flex-1 accent-sky-500"
+              />
+              <span className="w-8 text-right text-xs tabular-nums text-neutral-300">
+                {p.backgroundOpacity !== undefined ? `${p.backgroundOpacity}%` : "–"}
+              </span>
+            </div>
+          </div>
         </>
       );
     }
@@ -267,7 +359,7 @@ function KindFields({
           <Field label="Variant">
             <Select
               value={p.variant ?? "primary"}
-              options={["primary", "secondary", "destructive", "ghost"]}
+              options={["primary", "secondary", "destructive", "ghost", "plain"]}
               onChange={(v) => onChange({ variant: v })}
             />
           </Field>
@@ -293,6 +385,17 @@ function KindFields({
               />
             </Field>
           )}
+          <Field label="Content Align">
+            <SegmentedControl
+              value={p.contentAlign ?? "center"}
+              options={[
+                { value: "left", label: "←" },
+                { value: "center", label: "가운데" },
+                { value: "right", label: "→" },
+              ]}
+              onChange={(v) => onChange({ contentAlign: v })}
+            />
+          </Field>
         </>
       );
     }
