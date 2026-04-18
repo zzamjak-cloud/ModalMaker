@@ -287,7 +287,7 @@ export interface LayoutState {
   canRedo: () => boolean;
 
   // 신규 액션 (Phase A)
-  addPage: (title?: string) => Page;
+  addPage: (title?: string, root?: LayoutNode) => Page;
   removePage: (pageId: string) => void;
   updatePage: (pageId: string, patch: Partial<Omit<Page, "id" | "root">>) => void;
   setCurrentPage: (pageId: string) => void;
@@ -544,9 +544,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   // --- 신규 액션 ---
 
-  addPage: (title = "New Page") => {
+  addPage: (title = "New Page", root?: LayoutNode) => {
     const st = get();
-    const page = createEmptyPage(title, st.document.pages.length);
+    const base = createEmptyPage(title, st.document.pages.length);
+    const page = root ? { ...base, root } : base;
     set((s) =>
       commit(s, (draft) => {
         draft.pages.push(page);

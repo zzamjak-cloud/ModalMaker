@@ -1,6 +1,6 @@
 // Node View - 페이지들을 2D 다이어그램으로 표시하고 줌/팬/엣지 연결을 제공.
 // ReactFlow로 랩핑. 노드는 PageCardNode 커스텀 타입 하나만 사용.
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Background,
   Controls,
@@ -17,6 +17,7 @@ import { Plus } from "lucide-react";
 import { useLayoutStore } from "@/stores/layoutStore";
 import type { LayoutNode } from "@/types/layout";
 import { PageCardNode } from "./PageCardNode";
+import { AddPageDialog } from "./AddPageDialog";
 
 type RFPage = Node<{ pageId: string }, "pageCard">;
 
@@ -49,9 +50,10 @@ export function NodeView() {
   const movePage = useLayoutStore((s) => s.movePage);
   const setCurrentPage = useLayoutStore((s) => s.setCurrentPage);
   const setMode = useLayoutStore((s) => s.setMode);
-  const addPage = useLayoutStore((s) => s.addPage);
   const addEdge = useLayoutStore((s) => s.addEdge);
   const removeEdge = useLayoutStore((s) => s.removeEdge);
+
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   const rfNodes: RFPage[] = useMemo(
     () =>
@@ -160,7 +162,7 @@ export function NodeView() {
         <Controls className="!rounded-md !border !border-neutral-800 !bg-neutral-900" />
         <Panel position="top-left" className="!m-2">
           <button
-            onClick={() => addPage("Page " + (pages.length + 1))}
+            onClick={() => setShowAddDialog(true)}
             className="flex items-center gap-1 rounded-md border border-sky-500/40 bg-sky-500/20 px-2.5 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-500/30"
           >
             <Plus size={12} />
@@ -168,6 +170,8 @@ export function NodeView() {
           </button>
         </Panel>
       </ReactFlow>
+
+      {showAddDialog && <AddPageDialog onClose={() => setShowAddDialog(false)} />}
     </div>
   );
 }
