@@ -5,6 +5,7 @@ import {
   Box,
   CheckSquare,
   ChevronsUpDown,
+  LayoutGrid,
   Loader,
   Minus,
   MousePointerClick,
@@ -23,6 +24,7 @@ interface PaletteItem {
 
 const ITEMS: PaletteItem[] = [
   { kind: "container", label: "Container", Icon: Box, hint: "Row / Column / Grid" },
+  { kind: "panel-layout", label: "Panel Layout", Icon: LayoutGrid, hint: "Header / Sides / Footer" },
   { kind: "foldable", label: "Foldable", Icon: ChevronsUpDown, hint: "접힘 섹션" },
   { kind: "text", label: "Text", Icon: Type, hint: "더블 클릭으로 편집" },
   { kind: "button", label: "Button", Icon: MousePointerClick },
