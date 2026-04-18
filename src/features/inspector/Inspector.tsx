@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
+import { PanelLayoutSection } from "./PanelLayoutSection";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -68,6 +69,14 @@ function KindFields({
   onChange: (patch: Record<string, unknown>) => void;
 }) {
   switch (node.kind) {
+    case "panel-layout": {
+      return (
+        <PanelLayoutSection
+          node={node}
+          onChange={(patch) => onChange(patch as Record<string, unknown>)}
+        />
+      );
+    }
     case "container": {
       const p = node.props as ContainerProps;
       const direction = p.direction ?? "column";
