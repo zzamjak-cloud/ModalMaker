@@ -170,6 +170,7 @@ function KindFields({
               </Field>
             </>
           )}
+          <PinField node={node} onChange={onChange} />
         </>
       );
     }
@@ -431,6 +432,46 @@ function findNode(root: LayoutNode, id: string): LayoutNode | null {
     if (hit) return hit;
   }
   return null;
+}
+
+function findParent(root: LayoutNode, childId: string): LayoutNode | null {
+  if (!root.children) return null;
+  for (const c of root.children) {
+    if (c.id === childId) return root;
+    const hit = findParent(c, childId);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function PinField({
+  node,
+  onChange,
+}: {
+  node: LayoutNode;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  const doc = useLayoutStore((s) => s.document);
+  // 슬롯 container의 1단 자식 container만 pinned가 유효
+  const parent = findParent(doc.root, node.id);
+  const grand = parent ? findParent(doc.root, parent.id) : null;
+  const isInsideSlot = !!(grand && grand.kind === "panel-layout");
+  if (!isInsideSlot) return null;
+
+  const p = node.props as ContainerProps;
+  return (
+    <Field label="Pin">
+      <SegmentedControl
+        value={p.pinned ?? "none"}
+        options={[
+          { value: "none", label: "없음" },
+          { value: "top", label: "상단" },
+          { value: "bottom", label: "하단" },
+        ]}
+        onChange={(v) => onChange({ pinned: v })}
+      />
+    </Field>
+  );
 }
 
 // === 공용 폼 프리미티브 ===
