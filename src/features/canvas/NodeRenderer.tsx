@@ -11,10 +11,12 @@ import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
 import { applySizing } from "./applySizing";
+import { getLucideIcon } from "./lucideLookup";
 import {
   CheckboxProps,
   ContainerProps,
   FoldableProps,
+  IconProps,
   InputProps,
   ProgressProps,
   SplitProps,
@@ -219,6 +221,14 @@ function renderLeaf(
           }}
         />
       );
+    }
+    case "icon": {
+      const p = node.props as IconProps;
+      const Comp = getLucideIcon(p.name);
+      if (!Comp) {
+        return <span className="text-xs text-neutral-500">?{p.name ?? ""}</span>;
+      }
+      return <Comp size={p.size ?? 20} color={p.color ?? "currentColor"} />;
     }
     default:
       return null;

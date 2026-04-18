@@ -136,6 +136,10 @@ function nodeLabel(node: LayoutNode): string {
       const orient = (node.props as { orientation?: string }).orientation === "vertical" ? " |" : " —";
       return `╌ Split (${style})${orient}`;
     }
+    case "icon": {
+      const n = (node.props as { name?: string }).name ?? "Icon";
+      return `◆ ${n}`;
+    }
   }
 }
 

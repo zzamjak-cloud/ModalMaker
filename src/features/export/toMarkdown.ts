@@ -56,6 +56,10 @@ function nodeLine(node: LayoutNode): string {
       if (p.label) parts.push(`"${p.label}"`);
       return `[Split: ${parts.join(", ")}]`;
     }
+    case "icon": {
+      const n = (node.props as { name?: string }).name ?? "Icon";
+      return `[Icon: ${n}]`;
+    }
   }
 }
 

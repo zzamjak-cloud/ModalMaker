@@ -11,7 +11,8 @@ export type NodeKind =
   | "checkbox"
   | "progress"
   | "split" // 구분선 (solid/dashed/dotted, 가로/세로)
-  | "foldable"; // 접힘 가능한 섹션. children 보유
+  | "foldable" // 접힘 가능한 섹션. children 보유
+  | "icon"; // Lucide 아이콘 leaf
 
 // 컨테이너/폴딩만 자식을 가진다. 그 외는 leaf.
 export const CONTAINER_KINDS: NodeKind[] = ["container", "foldable"];
@@ -54,6 +55,8 @@ export interface ButtonProps {
   label: string;
   variant?: "primary" | "secondary" | "destructive" | "ghost";
   size?: "sm" | "md" | "lg";
+  iconName?: string;                 // Lucide 아이콘 이름 (선택)
+  iconPosition?: "left" | "right";   // 기본 "left"
 }
 
 export interface InputProps {
@@ -87,6 +90,12 @@ export interface SplitProps {
   label?: string;
 }
 
+export interface IconProps {
+  name: string;    // Lucide 아이콘의 PascalCase 이름 (예: "Star", "Heart", "Settings")
+  size?: number;   // 기본 20
+  color?: string;  // hex, 기본 currentColor
+}
+
 export type NodeProps =
   | ContainerProps
   | TextProps
@@ -95,7 +104,8 @@ export type NodeProps =
   | CheckboxProps
   | ProgressProps
   | SplitProps
-  | FoldableProps;
+  | FoldableProps
+  | IconProps;
 
 // 모든 노드에 공용 적용되는 고정 크기 제어.
 // fixedSize=false(기본) 혹은 undefined면 자동 크기.

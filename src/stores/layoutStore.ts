@@ -45,6 +45,8 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
       return { value: 50, max: 100 };
     case "split":
       return { orientation: "horizontal", style: "solid", thickness: 1 };
+    case "icon":
+      return { name: "Star", size: 20 };
   }
 }
 

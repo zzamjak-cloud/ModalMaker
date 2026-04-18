@@ -8,6 +8,7 @@ import {
   Loader,
   Minus,
   MousePointerClick,
+  Sparkles,
   Type,
   TextCursorInput,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const ITEMS: PaletteItem[] = [
   { kind: "button", label: "Button", Icon: MousePointerClick },
   { kind: "input", label: "Input", Icon: TextCursorInput },
   { kind: "checkbox", label: "Checkbox", Icon: CheckSquare },
+  { kind: "icon", label: "Icon", Icon: Sparkles, hint: "Lucide 아이콘" },
   { kind: "progress", label: "Progress", Icon: Loader },
   { kind: "split", label: "Split", Icon: Minus, hint: "실선 / 대시 / 점선" },
 ];

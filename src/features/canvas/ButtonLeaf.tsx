@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import type { ButtonProps, LayoutNode } from "@/types/layout";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { getLucideIcon } from "./lucideLookup";
 
 export function ButtonLeaf({
   node,
@@ -77,16 +78,22 @@ export function ButtonLeaf({
     );
   }
 
+  const Icon = getLucideIcon(p.iconName);
+  const pos = p.iconPosition ?? "left";
+  const iconPx = { sm: 12, md: 14, lg: 16 }[p.size ?? "md"];
+
   return (
     <button
       onDoubleClick={(e) => {
         e.stopPropagation();
         setEditing(true);
       }}
-      className={cn("rounded-md font-medium transition", variantClass, sizeClass)}
+      className={cn("inline-flex items-center gap-1.5 rounded-md font-medium transition", variantClass, sizeClass)}
       title="더블 클릭하여 편집"
     >
-      {p.label}
+      {Icon && pos === "left" && <Icon size={iconPx} />}
+      <span>{p.label}</span>
+      {Icon && pos === "right" && <Icon size={iconPx} />}
     </button>
   );
 }

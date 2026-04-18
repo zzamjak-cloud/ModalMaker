@@ -4,11 +4,13 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
+import { IconPicker } from "./IconPicker";
 import type {
   ButtonProps,
   CheckboxProps,
   ContainerProps,
   FoldableProps,
+  IconProps,
   InputProps,
   LayoutNode,
   ProgressProps,
@@ -221,6 +223,21 @@ function KindFields({
               onChange={(v) => onChange({ size: v })}
             />
           </Field>
+          <Field label="Icon">
+            <IconPicker value={p.iconName} onChange={(v) => onChange({ iconName: v || undefined })} />
+          </Field>
+          {p.iconName && (
+            <Field label="Icon Position">
+              <SegmentedControl
+                value={p.iconPosition ?? "left"}
+                options={[
+                  { value: "left", label: "왼쪽" },
+                  { value: "right", label: "오른쪽" },
+                ]}
+                onChange={(v) => onChange({ iconPosition: v })}
+              />
+            </Field>
+          )}
         </>
       );
     }
@@ -317,6 +334,22 @@ function KindFields({
               value={p.label ?? ""}
               onChange={(v) => onChange({ label: v })}
             />
+          </Field>
+        </>
+      );
+    }
+    case "icon": {
+      const p = node.props as IconProps;
+      return (
+        <>
+          <Field label="Icon">
+            <IconPicker value={p.name} onChange={(v) => onChange({ name: v || "HelpCircle" })} />
+          </Field>
+          <Field label="Size (px)">
+            <NumberInput value={p.size ?? 20} min={8} max={128} onChange={(v) => onChange({ size: v })} />
+          </Field>
+          <Field label="Color (hex)">
+            <TextInput value={p.color ?? ""} onChange={(v) => onChange({ color: v })} />
           </Field>
         </>
       );
