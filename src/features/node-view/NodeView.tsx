@@ -15,11 +15,32 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Plus } from "lucide-react";
 import { useLayoutStore } from "@/stores/layoutStore";
+import type { LayoutNode } from "@/types/layout";
 import { PageCardNode } from "./PageCardNode";
 
 type RFPage = Node<{ pageId: string }, "pageCard">;
 
 const nodeTypes = { pageCard: PageCardNode } as const;
+
+// 노드 트리 재귀 방문 (페이지 루트부터 모든 자손 순회)
+function walkTree(node: LayoutNode, visit: (n: LayoutNode) => void) {
+  visit(node);
+  node.children?.forEach((c) => walkTree(c, visit));
+}
+
+// 자동 엣지 라벨 - 인터렉션 소스 노드의 대표 이름
+function labelForNode(node: LayoutNode): string {
+  switch (node.kind) {
+    case "button":
+      return (node.props as { label?: string }).label ?? "Button";
+    case "icon":
+      return (node.props as { name?: string }).name ?? "Icon";
+    case "container":
+      return (node.props as { label?: string }).label ?? "Container";
+    default:
+      return node.kind;
+  }
+}
 
 export function NodeView() {
   const pages = useLayoutStore((s) => s.document.pages);
@@ -43,15 +64,48 @@ export function NodeView() {
     [pages],
   );
 
+  // 인터렉션(click→navigate) 기반 자동 엣지 - document.edges에 저장하지 않고 파생.
+  const autoEdges: Edge[] = useMemo(() => {
+    const out: Edge[] = [];
+    const seen = new Set<string>();
+    for (const p of pages) {
+      walkTree(p.root, (node) => {
+        for (const it of node.interactions ?? []) {
+          if (it.event !== "click") continue;
+          if (it.action.type !== "navigate") continue;
+          const tgt = it.action.targetPageId;
+          if (!tgt || tgt === p.id) continue;
+          if (!pages.some((pp) => pp.id === tgt)) continue;
+          const id = `auto-${p.id}-${tgt}-${node.id}-${it.id}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          out.push({
+            id,
+            source: p.id,
+            target: tgt,
+            animated: true,
+            label: labelForNode(node),
+            style: { stroke: "#0ea5e9" },
+            labelStyle: { fill: "#7dd3fc", fontSize: 10 },
+            labelBgStyle: { fill: "#0c4a6e", opacity: 0.7 },
+          });
+        }
+      });
+    }
+    return out;
+  }, [pages]);
+
   const rfEdges: Edge[] = useMemo(
-    () =>
-      edges.map((e) => ({
+    () => [
+      ...edges.map((e) => ({
         id: e.id,
         source: e.source,
         target: e.target,
         label: e.label,
       })),
-    [edges],
+      ...autoEdges,
+    ],
+    [edges, autoEdges],
   );
 
   // 드래그 중 계속 position 반영하지 않고, stop에서만 store에 commit.
@@ -76,7 +130,10 @@ export function NodeView() {
 
   const onEdgesDelete = useCallback(
     (eds: Edge[]) => {
-      eds.forEach((e) => removeEdge(e.id));
+      eds.forEach((e) => {
+        if (e.id.startsWith("auto-")) return; // 자동 엣지는 인터렉션 편집으로만 삭제 가능
+        removeEdge(e.id);
+      });
     },
     [removeEdge],
   );
