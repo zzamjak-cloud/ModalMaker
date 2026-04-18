@@ -1,6 +1,7 @@
 // 캔버스 루트 - 활성 편집 대상(현재 페이지 또는 편집 중 모듈)의 root를 렌더링.
 // viewport가 설정되어 있으면 해당 해상도의 고정 박스로 표시하고,
 // safeAreaPct로 안쪽 마진(%)을 적용한다. 모듈 편집 중에는 free 뷰포트로 간주.
+import { useEffect } from "react";
 import { useLayoutStore, currentPage, activeRoot } from "@/stores/layoutStore";
 import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 import { NodeRenderer } from "./NodeRenderer";
@@ -15,6 +16,19 @@ function resolveSize(v: ViewportSettings): { width: number; height: number } | n
 
 export function Canvas() {
   const state = useLayoutStore();
+  const clearMultiSelect = useLayoutStore((s) => s.clearMultiSelect);
+  const select = useLayoutStore((s) => s.select);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        clearMultiSelect();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clearMultiSelect]);
+
   const root = activeRoot(state);
   const editingModule = state.editingModuleId
     ? state.document.modules.find((m) => m.id === state.editingModuleId) ?? null
@@ -62,7 +76,13 @@ export function Canvas() {
 
   if (!size) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        onClick={() => {
+          clearMultiSelect();
+          select(null);
+        }}
+      >
         {moduleBadge}
         <CanvasViewport
           key={state.document.id}
@@ -76,7 +96,13 @@ export function Canvas() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onClick={() => {
+        clearMultiSelect();
+        select(null);
+      }}
+    >
       {moduleBadge}
       <CanvasViewport
         key={state.document.id}
