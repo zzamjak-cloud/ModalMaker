@@ -34,6 +34,10 @@ function safeLabel(node: LayoutNode): string {
         const n = (node.props as { name?: string }).name ?? "Icon";
         return n;
       }
+      case "module-ref": {
+        const n = (node.props as { label?: string }).label ?? "Module";
+        return n;
+      }
     }
   })();
   // Mermaid 예약 문자 이스케이프

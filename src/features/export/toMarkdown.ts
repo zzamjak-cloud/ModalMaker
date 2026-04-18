@@ -60,6 +60,11 @@ function nodeLine(node: LayoutNode): string {
       const n = (node.props as { name?: string }).name ?? "Icon";
       return `[Icon: ${n}]`;
     }
+    case "module-ref": {
+      const n = (node.props as { label?: string; moduleId?: string }).label
+        ?? `Module ${(node.props as { moduleId?: string }).moduleId ?? ""}`;
+      return `[Module: ${n}]`;
+    }
   }
 }
 

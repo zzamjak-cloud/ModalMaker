@@ -47,6 +47,8 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
       return { orientation: "horizontal", style: "solid", thickness: 1 };
     case "icon":
       return { name: "Star", size: 20 };
+    case "module-ref":
+      return { moduleId: "" }; // moduleId는 생성 호출부에서 덮어씌움
   }
 }
 
