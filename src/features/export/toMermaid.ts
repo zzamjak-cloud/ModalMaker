@@ -26,6 +26,14 @@ function safeLabel(node: LayoutNode): string {
         const pct = Math.round(((p.value ?? 0) / (p.max ?? 100)) * 100);
         return `Progress: ${pct}%`;
       }
+      case "split": {
+        const p = node.props as { style?: string; orientation?: string };
+        return `Split: ${p.style ?? "solid"}${p.orientation === "vertical" ? " v" : ""}`;
+      }
+      case "icon": {
+        const n = (node.props as { name?: string }).name ?? "Icon";
+        return n;
+      }
     }
   })();
   // Mermaid 예약 문자 이스케이프

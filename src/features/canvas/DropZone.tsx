@@ -1,30 +1,55 @@
 // 컨테이너 내부의 드롭 영역
-// "empty" 변형: 자식이 없을 때 표시되는 안내 박스
+// - "empty": 자식이 없을 때 중앙에 표시되는 안내 박스
+// - "gap":  자식들 사이/앞/뒤에 배치되어 특정 index로 삽입할 수 있게 함
+//           부모 direction(row|column|grid)에 맞춰 얇은 수직/수평 막대로 표시
 import { useDroppable } from "@dnd-kit/core";
 import { cn } from "@/lib/cn";
 
 interface Props {
   containerId: string;
   variant?: "empty" | "gap";
+  index?: number;
+  direction?: "row" | "column" | "grid";
 }
 
-export function DropZone({ containerId, variant = "gap" }: Props) {
+export function DropZone({ containerId, variant = "gap", index, direction = "column" }: Props) {
   const { isOver, setNodeRef } = useDroppable({
-    id: `drop-${containerId}`,
-    data: { containerId },
+    id: `drop-${containerId}-${index ?? "empty"}`,
+    data: { containerId, index },
   });
+
+  if (variant === "empty") {
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex min-h-[72px] items-center justify-center rounded border-2 border-dashed px-3 py-2 text-xs transition",
+          isOver
+            ? "border-sky-400 bg-sky-500/10 text-sky-300"
+            : "border-neutral-700 text-neutral-500",
+        )}
+      >
+        {isOver ? "여기에 놓아주세요" : "여기에 컴포넌트를 드래그하세요"}
+      </div>
+    );
+  }
+
+  // gap 변형: direction에 따라 수평/수직 막대, 드래그 중일 때만 강조
+  const isRow = direction === "row";
   return (
     <div
       ref={setNodeRef}
       className={cn(
-        "flex items-center justify-center rounded border-2 border-dashed text-xs transition",
-        variant === "empty"
-          ? "min-h-[72px] border-neutral-700 px-3 py-2 text-neutral-500"
-          : "h-2 border-transparent",
-        isOver && "border-sky-400 bg-sky-500/10 text-sky-300",
+        "rounded transition-all",
+        isRow ? "self-stretch" : "w-full",
+        isRow
+          ? isOver
+            ? "w-2 bg-sky-500"
+            : "w-1 bg-transparent hover:bg-neutral-700/60"
+          : isOver
+            ? "h-2 bg-sky-500"
+            : "h-1 bg-transparent hover:bg-neutral-700/60",
       )}
-    >
-      {variant === "empty" && (isOver ? "여기에 놓아주세요" : "여기에 컴포넌트를 드래그하세요")}
-    </div>
+    />
   );
 }

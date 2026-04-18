@@ -49,6 +49,17 @@ function nodeLine(node: LayoutNode): string {
       const pct = Math.round(((p.value ?? 0) / (p.max ?? 100)) * 100);
       return `[ProgressBar: ${pct}%${p.label ? ` "${p.label}"` : ""}]`;
     }
+    case "split": {
+      const p = node.props as { style?: string; orientation?: string; label?: string };
+      const parts: string[] = [p.style ?? "solid"];
+      if (p.orientation === "vertical") parts.push("vertical");
+      if (p.label) parts.push(`"${p.label}"`);
+      return `[Split: ${parts.join(", ")}]`;
+    }
+    case "icon": {
+      const n = (node.props as { name?: string }).name ?? "Icon";
+      return `[Icon: ${n}]`;
+    }
   }
 }
 

@@ -43,6 +43,10 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
       return { label: "Option", checked: false };
     case "progress":
       return { value: 50, max: 100 };
+    case "split":
+      return { orientation: "horizontal", style: "solid", thickness: 1 };
+    case "icon":
+      return { name: "Star", size: 20 };
   }
 }
 
@@ -104,7 +108,9 @@ interface LayoutState {
   addNewNode: (parentId: string, kind: NodeKind, index?: number) => LayoutNode;
   moveNode: (nodeId: string, targetParentId: string, index?: number) => void;
   updateProps: (id: string, patch: Partial<NodeProps>) => void;
+  updateSizing: (id: string, patch: Partial<import("@/types/layout").SizingProps>) => void;
   updateTitle: (title: string) => void;
+  updateViewport: (patch: Partial<import("@/types/layout").ViewportSettings>) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
 
@@ -201,10 +207,27 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }),
     ),
 
+  updateSizing: (id, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const node = findNode(draft.root, id);
+        if (!node) return;
+        node.sizing = { ...(node.sizing ?? {}), ...patch };
+      }),
+    ),
+
   updateTitle: (title) =>
     set((s) =>
       commit(s, (draft) => {
         draft.title = title;
+      }),
+    ),
+
+  updateViewport: (patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const prev = draft.viewport ?? { preset: "free" };
+        draft.viewport = { ...prev, ...patch };
       }),
     ),
 
@@ -271,6 +294,7 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
     ...node,
     id: newId(),
     props: { ...node.props },
+    sizing: node.sizing ? { ...node.sizing } : undefined,
     children: node.children?.map(cloneWithNewIds),
   };
 }

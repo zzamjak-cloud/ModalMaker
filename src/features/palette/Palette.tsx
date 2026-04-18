@@ -6,7 +6,9 @@ import {
   CheckSquare,
   ChevronsUpDown,
   Loader,
+  Minus,
   MousePointerClick,
+  Sparkles,
   Type,
   TextCursorInput,
 } from "lucide-react";
@@ -23,11 +25,13 @@ interface PaletteItem {
 const ITEMS: PaletteItem[] = [
   { kind: "container", label: "Container", Icon: Box, hint: "Row / Column / Grid" },
   { kind: "foldable", label: "Foldable", Icon: ChevronsUpDown, hint: "접힘 섹션" },
-  { kind: "text", label: "Text", Icon: Type },
+  { kind: "text", label: "Text", Icon: Type, hint: "더블 클릭으로 편집" },
   { kind: "button", label: "Button", Icon: MousePointerClick },
   { kind: "input", label: "Input", Icon: TextCursorInput },
   { kind: "checkbox", label: "Checkbox", Icon: CheckSquare },
+  { kind: "icon", label: "Icon", Icon: Sparkles, hint: "Lucide 아이콘" },
   { kind: "progress", label: "Progress", Icon: Loader },
+  { kind: "split", label: "Split", Icon: Minus, hint: "실선 / 대시 / 점선" },
 ];
 
 export function Palette() {

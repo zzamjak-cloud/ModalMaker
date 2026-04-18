@@ -1,72 +1,46 @@
-// 캔버스 루트
-// DndContext를 통합 관리하고, onDragEnd에서 드롭 의도를 해석해 스토어를 뮤테이션한다.
-// - source="palette" + over.containerId → addNode
-// - source="canvas" + over.containerId  → moveNode (자기 자식으로는 못 옮김)
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
-import { useState } from "react";
+// 캔버스 루트 - 문서 트리의 루트 컨테이너를 렌더링한다.
+// viewport가 설정되어 있으면 해당 해상도의 고정 박스로 표시하고,
+// safeAreaPct로 안쪽 마진(%)을 적용한다. free는 기존처럼 자식 크기에 맞춘다.
 import { useLayoutStore } from "@/stores/layoutStore";
+import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 import { NodeRenderer } from "./NodeRenderer";
-import type { NodeKind } from "@/types/layout";
+
+function resolveSize(v: ViewportSettings): { width: number; height: number } | null {
+  if (v.preset === "free") return null;
+  if (v.preset === "custom") return { width: v.width ?? 1280, height: v.height ?? 720 };
+  const p = VIEWPORT_PRESETS[v.preset];
+  return { width: p.width, height: p.height };
+}
 
 export function Canvas() {
-  const doc = useLayoutStore((s) => s.document);
-  const addNewNode = useLayoutStore((s) => s.addNewNode);
-  const moveNode = useLayoutStore((s) => s.moveNode);
-  const select = useLayoutStore((s) => s.select);
+  const root = useLayoutStore((s) => s.document.root);
+  const viewport = useLayoutStore((s) => s.document.viewport) ?? { preset: "free" as const };
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+  const size = resolveSize(viewport);
+  const safe = Math.max(0, Math.min(20, viewport.safeAreaPct ?? 0));
 
-  const [activeLabel, setActiveLabel] = useState<string | null>(null);
-
-  const onDragStart = (e: DragStartEvent) => {
-    const data = e.active.data.current as { source?: string; kind?: NodeKind; nodeId?: string };
-    if (data?.source === "palette") {
-      setActiveLabel(`+ ${data.kind}`);
-    } else if (data?.source === "canvas") {
-      setActiveLabel("이동 중…");
-    }
-  };
-
-  const onDragEnd = (e: DragEndEvent) => {
-    setActiveLabel(null);
-    const active = e.active.data.current as
-      | { source?: "palette" | "canvas"; kind?: NodeKind; nodeId?: string }
-      | undefined;
-    const over = e.over?.data.current as { containerId?: string } | undefined;
-    if (!active || !over?.containerId) return;
-
-    if (active.source === "palette" && active.kind) {
-      const created = addNewNode(over.containerId, active.kind);
-      select(created.id);
-      return;
-    }
-    if (active.source === "canvas" && active.nodeId) {
-      moveNode(active.nodeId, over.containerId);
-    }
-  };
+  if (!size) {
+    return (
+      <div className="relative">
+        <NodeRenderer node={root} depth={0} />
+      </div>
+    );
+  }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <div className="relative">
-        <NodeRenderer node={doc.root} depth={0} />
+    <div
+      className="relative rounded-md bg-neutral-900/50 ring-1 ring-neutral-800"
+      style={{ width: size.width, height: size.height }}
+    >
+      <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
+        {size.width} × {size.height}
       </div>
-      <DragOverlay>
-        {activeLabel && (
-          <div className="rounded-md bg-sky-500/90 px-3 py-1.5 text-sm text-white shadow-lg">
-            {activeLabel}
-          </div>
-        )}
-      </DragOverlay>
-    </DndContext>
+      <div
+        className="h-full w-full"
+        style={{ padding: `${safe}%` }}
+      >
+        <NodeRenderer node={root} depth={0} />
+      </div>
+    </div>
   );
 }

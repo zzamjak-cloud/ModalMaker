@@ -32,6 +32,8 @@ import { saveTextFile } from "@/lib/tauri";
 import { cloneWithNewIds } from "@/stores/layoutStore";
 import type { LayoutDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
+import { SaveAsDialog } from "./SaveAsDialog";
+import { ViewportSelector } from "./ViewportSelector";
 
 interface Props {
   onNewClick: () => void;
@@ -52,12 +54,40 @@ export function Toolbar({ onNewClick }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [savedDocs, setSavedDocs] = useState<LayoutDocument[]>([]);
   const [openLoad, setOpenLoad] = useState(false);
+  const [openSaveAs, setOpenSaveAs] = useState(false);
 
   const exported = renderExport(doc, format, includePrompt);
 
   async function save() {
-    await currentAdapter().saveDocument(doc);
-    flash(`저장됨: ${doc.title}`);
+    try {
+      await currentAdapter().saveDocument(doc);
+      flash(`저장됨: ${doc.title}`);
+    } catch (err) {
+      console.error("Save failed:", err);
+      flash(`저장 실패: ${readableError(err)}`);
+    }
+  }
+
+  async function saveAs(newTitle: string) {
+    const now = Date.now();
+    const copy: LayoutDocument = {
+      ...doc,
+      id: newId("doc"),
+      title: newTitle,
+      root: cloneWithNewIds(doc.root),
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      await currentAdapter().saveDocument(copy);
+      setDocument(copy); // 이후 사용자가 사본을 계속 편집
+      flash(`새 파일로 저장됨: ${newTitle}`);
+    } catch (err) {
+      console.error("Save As failed:", err);
+      flash(`다른 이름으로 저장 실패: ${readableError(err)}`);
+    } finally {
+      setOpenSaveAs(false);
+    }
   }
 
   async function saveAsPreset() {
@@ -67,8 +97,13 @@ export function Toolbar({ onNewClick }: Props) {
       title: `${doc.title} (프리셋)`,
       root: cloneWithNewIds(doc.root),
     };
-    await currentAdapter().saveUserPreset(copy);
-    flash("내 프리셋에 저장되었습니다");
+    try {
+      await currentAdapter().saveUserPreset(copy);
+      flash("내 프리셋에 저장되었습니다");
+    } catch (err) {
+      console.error("Save preset failed:", err);
+      flash(`프리셋 저장 실패: ${readableError(err)}`);
+    }
   }
 
   async function openLoadDialog() {
@@ -78,12 +113,8 @@ export function Toolbar({ onNewClick }: Props) {
   }
 
   function load(d: LayoutDocument) {
-    setDocument({
-      ...d,
-      id: newId("doc"),
-      root: cloneWithNewIds(d.root),
-      updatedAt: Date.now(),
-    });
+    // id/원본 root id를 그대로 유지해야 이후 Save가 '원본 덮어쓰기'로 동작한다.
+    setDocument(d);
     setOpenLoad(false);
   }
 
@@ -121,6 +152,10 @@ export function Toolbar({ onNewClick }: Props) {
           <Save size={14} />
           <span>Save</span>
         </ToolbarButton>
+        <ToolbarButton onClick={() => setOpenSaveAs(true)} title="다른 이름으로 저장">
+          <Save size={14} />
+          <span>Save As</span>
+        </ToolbarButton>
         <ToolbarButton onClick={openLoadDialog} title="저장된 문서 불러오기">
           <FolderOpen size={14} />
           <span>Load</span>
@@ -147,6 +182,9 @@ export function Toolbar({ onNewClick }: Props) {
           className="w-48 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
           placeholder="제목"
         />
+
+        <div className="h-5 w-px bg-neutral-800" />
+        <ViewportSelector />
 
         <div className="flex-1" />
 
@@ -192,6 +230,13 @@ export function Toolbar({ onNewClick }: Props) {
       {openLoad && (
         <LoadDialog docs={savedDocs} onClose={() => setOpenLoad(false)} onLoad={load} />
       )}
+      {openSaveAs && (
+        <SaveAsDialog
+          initialTitle={`${doc.title} (사본)`}
+          onCancel={() => setOpenSaveAs(false)}
+          onConfirm={saveAs}
+        />
+      )}
     </>
   );
 }
@@ -205,6 +250,16 @@ function renderExport(doc: LayoutDocument, format: ExportFormat, includePrompt: 
     case "mermaid":
       return toMermaid(doc);
   }
+}
+
+function readableError(err: unknown): string {
+  if (err instanceof Error) {
+    // Firestore permission-denied 에러 메시지를 짧게
+    if (err.message.includes("permission")) return "권한 오류 (rules/로그인 확인)";
+    if (err.message.includes("Unsupported field value")) return "지원하지 않는 필드 값";
+    return err.message.slice(0, 80);
+  }
+  return String(err).slice(0, 80);
 }
 
 function slug(s: string): string {
