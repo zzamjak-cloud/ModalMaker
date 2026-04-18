@@ -30,7 +30,6 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
     alignItems: p.align,
     justifyContent: p.justify === "between" ? "space-between" : p.justify,
   };
-  // uniformPadding=false일 때만 방향별 개별 적용
   const fallback = p.padding ?? 12;
   if (p.uniformPadding === false) {
     base.paddingTop = p.paddingTop ?? fallback;
@@ -39,6 +38,12 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
     base.paddingLeft = p.paddingLeft ?? fallback;
   } else {
     base.padding = fallback;
+  }
+  // Container 자체 경계선
+  if (p.borderStyle && p.borderStyle !== "none") {
+    base.borderStyle = p.borderStyle;
+    base.borderWidth = p.borderWidth ?? 1;
+    base.borderColor = p.borderColor ?? "#525252";
   }
   return base;
 }

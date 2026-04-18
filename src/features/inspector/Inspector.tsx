@@ -127,6 +127,36 @@ function KindFields({
             left={p.paddingLeft ?? p.padding ?? 12}
             onChange={onChange}
           />
+          <Field label="Border Style">
+            <SegmentedControl
+              value={p.borderStyle ?? "none"}
+              options={[
+                { value: "none", label: "없음" },
+                { value: "solid", label: "실선" },
+                { value: "dashed", label: "대시" },
+                { value: "dotted", label: "점선" },
+              ]}
+              onChange={(v) => onChange({ borderStyle: v })}
+            />
+          </Field>
+          {p.borderStyle && p.borderStyle !== "none" && (
+            <>
+              <Field label="Border Width (px)">
+                <NumberInput
+                  value={p.borderWidth ?? 1}
+                  min={0}
+                  max={8}
+                  onChange={(v) => onChange({ borderWidth: v })}
+                />
+              </Field>
+              <Field label="Border Color (hex)">
+                <TextInput
+                  value={p.borderColor ?? "#525252"}
+                  onChange={(v) => onChange({ borderColor: v })}
+                />
+              </Field>
+            </>
+          )}
         </>
       );
     }
