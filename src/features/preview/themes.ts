@@ -6,6 +6,10 @@ export interface ThemeTokens {
   canvasBg: string;
   surfaceBg: string;
   surfaceBg2: string;
+  /** rgba() 생성용 RGB 문자열 (depth===0). 예: "23,23,23" */
+  surfaceRGBStr: string;
+  /** rgba() 생성용 RGB 문자열 (depth>0). 예: "23,23,23" */
+  surfaceRGBStr2: string;
   // 텍스트
   textPrimary: string;
   textSecondary: string;
@@ -31,6 +35,8 @@ const DARK: ThemeTokens = {
   canvasBg: "#0a0a0a",
   surfaceBg: "rgba(23,23,23,0.92)",
   surfaceBg2: "rgba(23,23,23,0.55)",
+  surfaceRGBStr: "50,50,50",
+  surfaceRGBStr2: "40,40,40",
   textPrimary: "#f5f5f5",
   textSecondary: "#a3a3a3",
   textMuted: "#737373",
@@ -52,6 +58,8 @@ const LIGHT: ThemeTokens = {
   canvasBg: "#f5f5f5",
   surfaceBg: "#ffffff",
   surfaceBg2: "#f9fafb",
+  surfaceRGBStr: "210,210,210",
+  surfaceRGBStr2: "220,220,220",
   textPrimary: "#171717",
   textSecondary: "#525252",
   textMuted: "#a3a3a3",
@@ -73,6 +81,8 @@ const WARM: ThemeTokens = {
   canvasBg: "#1c1410",
   surfaceBg: "rgba(42,28,18,0.95)",
   surfaceBg2: "rgba(42,28,18,0.6)",
+  surfaceRGBStr: "85,58,32",
+  surfaceRGBStr2: "68,46,25",
   textPrimary: "#fef3c7",
   textSecondary: "#fbbf24",
   textMuted: "#92400e",
@@ -94,6 +104,8 @@ const OCEAN: ThemeTokens = {
   canvasBg: "#0c1a2e",
   surfaceBg: "rgba(14,30,55,0.95)",
   surfaceBg2: "rgba(14,30,55,0.6)",
+  surfaceRGBStr: "26,70,115",
+  surfaceRGBStr2: "20,55,90",
   textPrimary: "#e0f2fe",
   textSecondary: "#7dd3fc",
   textMuted: "#38bdf8",
