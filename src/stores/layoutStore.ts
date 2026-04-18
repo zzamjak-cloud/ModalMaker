@@ -24,6 +24,17 @@ export function createNode(kind: NodeKind, overrides: Partial<LayoutNode> = {}):
     children: isContainerKind(kind) ? [] : undefined,
     ...overrides,
   };
+  if (kind === "panel-layout" && (!overrides.children || overrides.children.length === 0)) {
+    // 슬롯 container를 고정 5개 생성. 인덱스 = 슬롯 ID.
+    // 0=header, 1=left, 2=main, 3=right, 4=footer
+    base.children = [
+      createNode("container", { props: { direction: "row",    gap: 8, padding: 12, label: "Header" } }),
+      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Left"   } }),
+      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Main"   } }),
+      createNode("container", { props: { direction: "column", gap: 8, padding: 12, label: "Right"  } }),
+      createNode("container", { props: { direction: "row",    gap: 8, padding: 12, label: "Footer" } }),
+    ];
+  }
   return base;
 }
 
@@ -119,6 +130,7 @@ interface LayoutState {
   moveNode: (nodeId: string, targetParentId: string, index?: number) => void;
   updateProps: (id: string, patch: Partial<NodeProps>) => void;
   updateTitle: (title: string) => void;
+  updateViewport: (patch: Partial<import("@/types/layout").ViewportSettings>) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
 
@@ -222,6 +234,14 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }),
     ),
 
+  updateViewport: (patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const prev = draft.viewport ?? { preset: "free" };
+        draft.viewport = { ...prev, ...patch };
+      }),
+    ),
+
   removeNode: (id) =>
     set((s) =>
       commit(s, (draft) => {
@@ -287,4 +307,17 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
     props: { ...node.props },
     children: node.children?.map(cloneWithNewIds),
   };
+}
+
+// 주어진 childId가 panel-layout의 직접 자식(슬롯 container)이면 인덱스를 리턴.
+// 그 외(일반 container 자식, 슬롯 container 내부 자식 등)는 null.
+export function findPanelLayoutSlot(
+  root: LayoutNode,
+  childId: string,
+): { slotIndex: 0 | 1 | 2 | 3 | 4; parent: LayoutNode } | null {
+  const parent = findParent(root, childId);
+  if (!parent || parent.kind !== "panel-layout") return null;
+  const idx = parent.children?.findIndex((c) => c.id === childId) ?? -1;
+  if (idx < 0 || idx > 4) return null;
+  return { slotIndex: idx as 0 | 1 | 2 | 3 | 4, parent };
 }
