@@ -252,6 +252,10 @@ export interface LayoutState {
   document: NodeDocument;
   mode: EditorMode;
   selectedId: string | null;
+  selectedIds: string[];
+  toggleSelectMulti: (id: string) => void;
+  clearMultiSelect: () => void;
+  updatePropsMulti: (ids: string[], patch: Partial<NodeProps>) => void;
   selectedPageId: string | null;
   editingModuleId: string | null;
   past: NodeDocument[];
@@ -327,6 +331,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   document: createEmptyNodeDocument(),
   mode: "canvas",
   selectedId: null,
+  selectedIds: [],
   selectedPageId: null,
   editingModuleId: null,
   past: [],
@@ -338,6 +343,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       past: [],
       future: [],
       selectedId: null,
+      selectedIds: [],
       selectedPageId: null,
       editingModuleId: null,
     })),
@@ -348,11 +354,54 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       past: [],
       future: [],
       selectedId: null,
+      selectedIds: [],
       selectedPageId: null,
       editingModuleId: null,
     })),
 
-  select: (id) => set({ selectedId: id }),
+  select: (id) => set({ selectedId: id, selectedIds: [] }),
+
+  toggleSelectMulti: (id: string) =>
+    set((s) => {
+      const root = activeRoot(s);
+      if (!root) return {};
+      const clickedNode = findNode(root, id);
+      if (!clickedNode) return {};
+      const current =
+        s.selectedIds.length > 0
+          ? s.selectedIds
+          : s.selectedId
+            ? [s.selectedId]
+            : [];
+      if (current.length > 0) {
+        const firstNode = findNode(root, current[0]);
+        if (firstNode && firstNode.kind !== clickedNode.kind) return {};
+      }
+      let next: string[];
+      if (current.includes(id)) {
+        next = current.filter((i) => i !== id);
+      } else {
+        next = [...current, id];
+      }
+      if (next.length === 0) return { selectedIds: [], selectedId: null };
+      if (next.length === 1) return { selectedIds: [], selectedId: next[0] };
+      return { selectedIds: next };
+    }),
+
+  clearMultiSelect: () => set({ selectedIds: [], selectedId: null }),
+
+  updatePropsMulti: (ids, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        for (const id of ids) {
+          const node = findNode(root, id);
+          if (!node) continue;
+          Object.assign(node.props, patch);
+        }
+      }),
+    ),
 
   addNode: (parentId, node, index) =>
     set((s) =>
@@ -618,6 +667,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       return {
         document: { ...s.document, currentPageId: pageId },
         selectedId: null,
+        selectedIds: [],
       };
     }),
 
@@ -690,10 +740,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     set((s) => {
       const exists = s.document.modules.some((m) => m.id === moduleId);
       if (!exists) return {};
-      return { editingModuleId: moduleId, selectedId: null };
+      return { editingModuleId: moduleId, selectedId: null, selectedIds: [] };
     }),
 
-  exitModuleEdit: () => set({ editingModuleId: null, selectedId: null }),
+  exitModuleEdit: () => set({ editingModuleId: null, selectedId: null, selectedIds: [] }),
 
   addEdge: (source, target, sourceHandle) => {
     const st = get();
