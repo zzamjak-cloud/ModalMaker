@@ -10,7 +10,14 @@ import { isContainerKind, type LayoutNode } from "@/types/layout";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
+import { ResizeHandles } from "./ResizeHandles";
 import { applySizing } from "./applySizing";
+import {
+  flexMainAxisMarginStyle,
+  justifyContentCss,
+  normalizeSizing,
+  type ParentFlexDirection,
+} from "@/lib/layoutSizing";
 import { getLucideIcon } from "./lucideLookup";
 import {
   CheckboxProps,
@@ -18,6 +25,7 @@ import {
   FoldableProps,
   IconProps,
   InputProps,
+  ModuleRefProps,
   ProgressProps,
   SplitProps,
   TextProps,
@@ -31,7 +39,7 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
     gridTemplateColumns: isGrid ? `repeat(${p.columns ?? 2}, minmax(0,1fr))` : undefined,
     gap: p.gap ?? 8,
     alignItems: p.align,
-    justifyContent: p.justify === "between" ? "space-between" : p.justify,
+    justifyContent: justifyContentCss(p.justify),
   };
   const fallback = p.padding ?? 12;
   if (p.uniformPadding === false) {
@@ -51,14 +59,33 @@ function containerStyle(p: ContainerProps): React.CSSProperties {
   return base;
 }
 
-export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: number }) {
+export function NodeRenderer({
+  node,
+  depth = 0,
+  visitedModuleIds,
+  parentDirection = "column",
+  /** 루트·module-ref 직하위 등 부모가 flex가 아닐 때 false (기본 false) */
+  parentIsFlexContainer = false,
+}: {
+  node: LayoutNode;
+  depth?: number;
+  visitedModuleIds?: Set<string>;
+  /** 직계 부모 flex/grid의 주축 방향 (자식 flex margin:auto에 사용) */
+  parentDirection?: ParentFlexDirection;
+  /** 직계 부모가 flex/grid 컨테이너일 때만 flexMainAxis 적용 */
+  parentIsFlexContainer?: boolean;
+}) {
   const selectedId = useLayoutStore((s) => s.selectedId);
+  const selectedIds = useLayoutStore((s) => s.selectedIds);
   const select = useLayoutStore((s) => s.select);
+  const toggleSelectMulti = useLayoutStore((s) => s.toggleSelectMulti);
+  const clearMultiSelect = useLayoutStore((s) => s.clearMultiSelect);
 
   // 리프 인라인 편집 상태 (Text/Button 공유) - 활성 시 드래그 비활성
   const [editingLeaf, setEditingLeaf] = useState(false);
 
   const isSelected = selectedId === node.id;
+  const isInMultiSelect = selectedIds.includes(node.id);
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
@@ -66,23 +93,93 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
     disabled: depth === 0 || editingLeaf, // 루트/편집 중은 드래그 금지
   });
 
+  // ring은 box-shadow 기반이라 레이아웃에 영향 없음 — border 대신 ring 사용
   const outline = cn(
-    "relative rounded-md border transition",
-    isSelected
-      ? "border-sky-500 ring-2 ring-sky-500/40"
-      : "border-transparent hover:border-neutral-700",
+    "relative rounded-md transition",
+    isSelected || isInMultiSelect
+      ? "ring-2 ring-sky-500/80"
+      : "hover:ring-1 hover:ring-neutral-600",
     isDragging && "opacity-50",
   );
 
   const selectHandler = (e: React.MouseEvent) => {
     e.stopPropagation();
-    select(node.id);
+    if (e.ctrlKey || e.metaKey) {
+      toggleSelectMulti(node.id);
+    } else {
+      clearMultiSelect();
+      select(node.id);
+    }
   };
+
+  // module-ref는 리프지만 내부적으로 다른 모듈 트리를 재귀 렌더하므로
+  // 일반 리프 경로 전에 처리하고, visitedModuleIds로 순환 참조를 감지한다.
+  if (node.kind === "module-ref") {
+    const p = node.props as ModuleRefProps;
+    const mod = useLayoutStore
+      .getState()
+      .document.modules.find((m) => m.id === p.moduleId);
+
+    const isCircular = !!visitedModuleIds && visitedModuleIds.has(p.moduleId);
+    const nextVisited = new Set(visitedModuleIds ?? []);
+    nextVisited.add(p.moduleId);
+
+    const content = !mod ? (
+      <span className="text-xs text-rose-400">[모듈 없음: {p.moduleId}]</span>
+    ) : isCircular ? (
+      <span
+        className="text-xs text-amber-400"
+        title="순환 참조로 렌더 중단"
+      >
+        ↻ 순환 참조: {mod.name}
+      </span>
+    ) : (
+      <NodeRenderer
+        node={mod.root}
+        depth={depth + 1}
+        visitedModuleIds={nextVisited}
+        parentDirection={parentDirection}
+        parentIsFlexContainer={false}
+      />
+    );
+
+    return (
+      <div
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        onClick={selectHandler}
+        className={cn(outline)}
+        style={{
+          ...applySizing(node),
+          ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+          position: "relative",
+        }}
+      >
+        <ResizeHandles nodeId={node.id} show={isSelected} />
+        {content}
+        <div className="pointer-events-none absolute -top-4 left-0 select-none text-[9px] uppercase tracking-wider text-neutral-500">
+          {mod ? `⊚ ${mod.name}` : "⊚ ?"}
+        </div>
+      </div>
+    );
+  }
 
   if (isContainerKind(node.kind)) {
     const p = node.props as ContainerProps & FoldableProps;
     const isFoldable = node.kind === "foldable";
     const open = !isFoldable || p.open !== false;
+    const rawDir = p.direction ?? "column";
+    const innerDir: ParentFlexDirection =
+      rawDir === "grid" ? "grid" : rawDir === "row" ? "row" : "column";
+    // 캔버스에서 농도 변화가 시각적으로 보이도록 neutral-600(82,82,82) 기준색 사용
+    const bgStyle: React.CSSProperties =
+      p.backgroundOpacity !== undefined
+        ? { background: `rgba(82,82,82,${p.backgroundOpacity / 100})` }
+        : {};
+    const flexStyle = parentIsFlexContainer
+      ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis)
+      : {};
     return (
       <div
         ref={setNodeRef}
@@ -90,6 +187,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
         {...attributes}
         onClick={selectHandler}
         className={cn(outline, depth === 0 ? "min-w-[320px] bg-neutral-900/80" : "bg-neutral-900/40")}
+        style={{ ...flexStyle, ...bgStyle }}
       >
         {isFoldable && (
           <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300">
@@ -98,7 +196,11 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
           </div>
         )}
         {open && (
-          <div style={{ ...containerStyle(p), ...applySizing(node) }}>
+          <div
+            className="relative min-h-0 min-w-0"
+            style={{ ...containerStyle(p), ...applySizing(node), position: "relative" }}
+          >
+            <ResizeHandles nodeId={node.id} show={isSelected} />
             {node.children?.length ? (
               <>
                 <DropZone
@@ -108,7 +210,13 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
                 />
                 {node.children.map((c, i) => (
                   <Fragment key={c.id}>
-                    <NodeRenderer node={c} depth={depth + 1} />
+                    <NodeRenderer
+                      node={c}
+                      depth={depth + 1}
+                      visitedModuleIds={visitedModuleIds}
+                      parentDirection={innerDir}
+                      parentIsFlexContainer
+                    />
                     <DropZone
                       containerId={node.id}
                       index={i + 1}
@@ -137,9 +245,14 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       {...listeners}
       {...attributes}
       onClick={selectHandler}
-      className={cn(outline, "px-1 py-0.5")}
-      style={applySizing(node)}
+      className={cn(outline)}
+      style={{
+        ...applySizing(node),
+        ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+        position: "relative",
+      }}
     >
+      <ResizeHandles nodeId={node.id} show={isSelected} />
       {renderLeaf(node, editingLeaf, setEditingLeaf)}
     </div>
   );
@@ -313,15 +426,16 @@ function TextLeaf({
     );
   }
 
-  const fixed = !!node.sizing?.fixedSize;
-  if (fixed) {
+  const { widthFixed, heightFixed, width, height } = normalizeSizing(node.sizing);
+  const fixedFrame = widthFixed || heightFixed;
+  if (fixedFrame) {
     return (
       <div
         className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
         style={{
           color: p.color,
-          width: node.sizing?.width,
-          height: node.sizing?.height,
+          width: widthFixed ? width : undefined,
+          height: heightFixed ? height : undefined,
           overflow: "hidden",
         }}
         onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}

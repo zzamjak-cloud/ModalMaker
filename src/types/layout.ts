@@ -12,7 +12,8 @@ export type NodeKind =
   | "progress"
   | "split" // 구분선 (solid/dashed/dotted, 가로/세로)
   | "foldable" // 접힘 가능한 섹션. children 보유
-  | "icon"; // Lucide 아이콘 leaf
+  | "icon" // Lucide 아이콘 leaf
+  | "module-ref"; // 모듈 인스턴스 (내부 편집 불가, 원본만 수정)
 
 // 컨테이너/폴딩만 자식을 가진다. 그 외는 leaf.
 export const CONTAINER_KINDS: NodeKind[] = ["container", "foldable"];
@@ -42,6 +43,9 @@ export interface ContainerProps {
   borderStyle?: "none" | "solid" | "dashed" | "dotted"; // 기본 "none"
   borderWidth?: number; // 기본 1, 허용 범위 0~8
   borderColor?: string; // 기본 "#525252"
+
+  // 배경 농도: 0(투명)~100(불투명). undefined=테마 기본값 사용
+  backgroundOpacity?: number;
 }
 
 export interface TextProps {
@@ -53,10 +57,17 @@ export interface TextProps {
 
 export interface ButtonProps {
   label: string;
-  variant?: "primary" | "secondary" | "destructive" | "ghost";
+  variant?: "primary" | "secondary" | "destructive" | "ghost" | "plain";
   size?: "sm" | "md" | "lg";
   iconName?: string;                 // Lucide 아이콘 이름 (선택)
   iconPosition?: "left" | "right";   // 기본 "left"
+  contentAlign?: "left" | "center" | "right"; // fixed size 시 내용 정렬, 기본 "center"
+  /** 탭 그룹 ID — 같은 값끼리 토글 그룹 형성 */
+  tabGroupId?: string;
+  /** 프리뷰 초기 활성 버튼 여부 (그룹당 하나) */
+  tabDefaultActive?: boolean;
+  /** 비활성 상태 variant, 기본 "ghost" */
+  tabInactiveVariant?: "primary" | "secondary" | "destructive" | "ghost" | "plain";
 }
 
 export interface InputProps {
@@ -96,6 +107,11 @@ export interface IconProps {
   color?: string;  // hex, 기본 currentColor
 }
 
+export interface ModuleRefProps {
+  moduleId: string;   // NodeDocument.modules의 id
+  label?: string;     // 레이어 트리/보조 표기
+}
+
 export type NodeProps =
   | ContainerProps
   | TextProps
@@ -105,14 +121,40 @@ export type NodeProps =
   | ProgressProps
   | SplitProps
   | FoldableProps
-  | IconProps;
+  | IconProps
+  | ModuleRefProps;
 
-// 모든 노드에 공용 적용되는 고정 크기 제어.
-// fixedSize=false(기본) 혹은 undefined면 자동 크기.
+// 인터렉션 이벤트
+export type InteractionEvent =
+  | "click"
+  | "hover"
+  | "press"
+  | "release"
+  | "disabled";
+
+// 인터렉션 액션
+export type InteractionAction =
+  | { type: "navigate"; targetPageId: string }
+  | { type: "close"; targetPageId?: string }
+  | { type: "applyStyle"; stylePresetId: string };
+
+export interface Interaction {
+  id: string;
+  event: InteractionEvent;
+  action: InteractionAction;
+}
+
+// 모든 노드에 공용 적용되는 크기 제어.
+// 레거시 fixedSize=true는 widthFixed·heightFixed가 없을 때 양축 모두 고정으로 간주.
 export interface SizingProps {
+  /** @deprecated widthFixed/heightFixed로 대체 */
   fixedSize?: boolean;
-  width?: number;  // px, fixedSize=true일 때만 적용
-  height?: number; // px, fixedSize=true일 때만 적용
+  /** true면 width(px) 고정, false/undefined면 가로는 내용·플렉스에 따름 */
+  widthFixed?: boolean;
+  /** true면 height(px) 고정 */
+  heightFixed?: boolean;
+  width?: number;
+  height?: number;
 }
 
 export interface LayoutNode {
@@ -120,10 +162,20 @@ export interface LayoutNode {
   kind: NodeKind;
   props: NodeProps;
   sizing?: SizingProps; // 공용 고정 크기
+  /**
+   * Flex 컨테이너의 직계 자식일 때만 의미 있음.
+   * push-end: 주축 끝 방향으로 margin:auto (예: row에서 우측 정렬)
+   * push-start: 주축 시작 방향으로 margin:auto
+   */
+  flexMainAxis?: "push-end" | "push-start";
+  interactions?: Interaction[]; // 순서는 우선순위와 무관, event별로 한 개씩만 의미있음
   style?: Partial<CSSProperties>;
   children?: LayoutNode[]; // container/foldable만 사용
 }
 
+// ⚠️ Legacy v1 스키마. 저장 경로에서는 더 이상 직접 쓰이지 않으며
+// 로드 시 migrateToV2()로 NodeDocument로 변환된다. 타입 자체는 마이그레이션
+// 입력 형태로만 유지.
 export interface LayoutDocument {
   id: string;
   title: string;
@@ -132,6 +184,45 @@ export interface LayoutDocument {
   createdAt: number;
   updatedAt: number;
   ownerUid?: string;
+}
+
+// 단일 페이지 + 루트 컨테이너 (Node View의 카드 하나에 대응)
+export interface Page {
+  id: string;
+  title: string;
+  root: LayoutNode;
+  position: { x: number; y: number }; // Node View 2D 좌표
+  viewport?: ViewportSettings;        // 페이지별 Canvas 해상도
+}
+
+// 공용 컴포넌트(헤더/사이드바 등). 원본만 수정하면 모든 module-ref에 반영.
+export interface Module {
+  id: string;
+  name: string;
+  root: LayoutNode; // Container 루트 권장
+}
+
+// 페이지 간 연결 (수동 + Phase B에서 인터렉션 기반 자동 생성)
+export interface PageEdge {
+  id: string;
+  source: string;       // sourcePageId
+  sourceHandle?: string; // Phase B에서 버튼 노드 id
+  target: string;       // targetPageId
+  label?: string;
+}
+
+// 최상위 문서 (v2). 여러 페이지 + 모듈 + 엣지를 묶는다.
+export interface NodeDocument {
+  id: string;
+  title: string;
+  pages: Page[];
+  modules: Module[];
+  edges: PageEdge[];
+  currentPageId: string;
+  createdAt: number;
+  updatedAt: number;
+  ownerUid?: string;
+  schemaVersion: 2;
 }
 
 export interface ViewportSettings {

@@ -1,10 +1,14 @@
 // 우측 속성 편집기 (Property Panel)
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
+import { Package } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
+import { FlexChildSection } from "./FlexChildSection";
 import { IconPicker } from "./IconPicker";
+import { InteractionSection } from "./InteractionSection";
+import { ColorPicker } from "./ColorPicker";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -13,19 +17,28 @@ import type {
   IconProps,
   InputProps,
   LayoutNode,
+  ModuleRefProps,
+  NodeProps,
   ProgressProps,
   SplitProps,
   TextProps,
 } from "@/types/layout";
 
 export function Inspector() {
-  const doc = useLayoutStore((s) => s.document);
+  const root = useLayoutStore((s) => activeRoot(s));
   const selectedId = useLayoutStore((s) => s.selectedId);
+  const editingModuleId = useLayoutStore((s) => s.editingModuleId);
   const updateProps = useLayoutStore((s) => s.updateProps);
   const removeNode = useLayoutStore((s) => s.removeNode);
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
+  const registerModule = useLayoutStore((s) => s.registerModule);
+  const selectedIds = useLayoutStore((s) => s.selectedIds);
+  const updatePropsMulti = useLayoutStore((s) => s.updatePropsMulti);
 
-  const node = useMemo(() => (selectedId ? findNode(doc.root, selectedId) : null), [doc, selectedId]);
+  const node = useMemo(
+    () => (selectedId && root ? findNode(root, selectedId) : null),
+    [root, selectedId],
+  );
 
   if (!node) {
     return (
@@ -38,6 +51,73 @@ export function Inspector() {
     );
   }
 
+  // 멀티 선택 모드 (2개 이상 선택 시)
+  if (selectedIds.length > 1 && root) {
+    const selectedNodes = selectedIds
+      .map((id) => findNode(root, id))
+      .filter((n): n is LayoutNode => n !== null);
+    const allSameKind = selectedNodes.length > 0 &&
+      selectedNodes.every((n) => n.kind === selectedNodes[0].kind);
+    const kind = allSameKind ? selectedNodes[0].kind : null;
+
+    // 혼재 값 계산: 모든 노드가 동일하면 그 값, 아니면 undefined
+    function getMixed<T>(getter: (n: LayoutNode) => T): T | undefined {
+      const vals = selectedNodes.map(getter);
+      return vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+    }
+
+    // 버튼 대표 노드 구성 (혼재 값은 undefined → 빈칸으로 표시)
+    const repNode: LayoutNode | null = (allSameKind && kind === "button" && selectedNodes.length > 0)
+      ? {
+          ...selectedNodes[0],
+          props: {
+            label: getMixed((n) => (n.props as ButtonProps).label) ?? "",
+            variant: getMixed((n) => (n.props as ButtonProps).variant) ?? (selectedNodes[0].props as ButtonProps).variant,
+            size: getMixed((n) => (n.props as ButtonProps).size) ?? (selectedNodes[0].props as ButtonProps).size,
+            contentAlign: getMixed((n) => (n.props as ButtonProps).contentAlign) ?? (selectedNodes[0].props as ButtonProps).contentAlign,
+            tabGroupId: getMixed((n) => (n.props as ButtonProps).tabGroupId),
+            tabInactiveVariant: getMixed((n) => (n.props as ButtonProps).tabInactiveVariant),
+          } as ButtonProps,
+        }
+      : null;
+
+    // 변경 적용: 빈 문자열은 skip (혼재 표시용 빈값은 전파 안 함)
+    const onChangeMulti = (patch: Record<string, unknown>) => {
+      const filtered = Object.fromEntries(
+        Object.entries(patch).filter(([, v]) => v !== "" && v !== undefined),
+      );
+      if (Object.keys(filtered).length > 0) {
+        updatePropsMulti(selectedIds, filtered as Partial<NodeProps>);
+      }
+    };
+
+    return (
+      <div className="flex flex-col gap-3 p-4">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-400">
+          {selectedIds.length}개 선택됨{kind ? ` (${kind})` : " — 다른 종류 혼재"}
+        </div>
+        {repNode && (
+          <>
+            <KindFields node={repNode} onChange={onChangeMulti} />
+            <div className="h-px bg-neutral-800" />
+            <SizeSection node={selectedNodes[0]} />
+          </>
+        )}
+        {!repNode && (
+          <div className="text-xs text-neutral-500">
+            같은 종류 노드를 선택하면 일괄 편집할 수 있습니다.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 모듈로 등록 가능 조건: 컨테이너 && 루트가 아님 && 이미 module-ref가 아님 && 모듈 편집 중이 아님
+  const canRegisterModule =
+    node.kind === "container" &&
+    node.id !== root?.id &&
+    !editingModuleId;
+
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
@@ -45,10 +125,18 @@ export function Inspector() {
           {node.kind}
         </div>
         <div className="flex gap-1">
-          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id}>
+          <Btn
+            onClick={() => registerModule(node.id)}
+            disabled={!canRegisterModule}
+            title="이 컨테이너를 공용 모듈로 등록"
+          >
+            <Package size={12} className="mr-1 inline" />
+            모듈로 등록
+          </Btn>
+          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === root?.id}>
             복제
           </Btn>
-          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id} danger>
+          <Btn onClick={() => removeNode(node.id)} disabled={node.id === root?.id} danger>
             삭제
           </Btn>
         </div>
@@ -57,6 +145,10 @@ export function Inspector() {
       <KindFields node={node} onChange={(patch) => updateProps(node.id, patch)} />
       <div className="h-px bg-neutral-800" />
       <SizeSection node={node} />
+      <div className="h-px bg-neutral-800" />
+      <FlexChildSection node={node} />
+      <div className="h-px bg-neutral-800" />
+      <InteractionSection node={node} />
     </div>
   );
 }
@@ -77,8 +169,45 @@ function KindFields({
       // column: 가로=align(교차축), 세로=justify(주축) / row: 반대.
       const horizontalKey = isRow ? "justify" : "align";
       const verticalKey = isRow ? "align" : "justify";
-      const horizontalValue = (isRow ? p.justify : p.align) ?? "start";
-      const verticalValue = (isRow ? p.align : p.justify) ?? "start";
+      // UI 라벨 통일: 가로=좌/중/우/균등, 세로=상/중/하/균등 — justify 네 번째는 between, align 네 번째는 stretch
+      let horizontalValueRaw = (isRow ? p.justify : p.align) ?? "start";
+      let verticalValueRaw = (isRow ? p.align : p.justify) ?? "start";
+      if (horizontalKey === "justify" && horizontalValueRaw === "around") horizontalValueRaw = "between";
+      if (verticalKey === "justify" && verticalValueRaw === "around") verticalValueRaw = "between";
+
+      const horizontalJustifyOpts = [
+        { value: "start", label: "좌측" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "우측" },
+        { value: "between", label: "균등" },
+      ] as const;
+      const horizontalAlignOpts = [
+        { value: "start", label: "좌측" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "우측" },
+        { value: "stretch", label: "균등" },
+      ] as const;
+      const verticalJustifyOpts = [
+        { value: "start", label: "상단" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "하단" },
+        { value: "between", label: "균등" },
+      ] as const;
+      const verticalAlignOpts = [
+        { value: "start", label: "상단" },
+        { value: "center", label: "중앙" },
+        { value: "end", label: "하단" },
+        { value: "stretch", label: "균등" },
+      ] as const;
+
+      const horizontalOpts = horizontalKey === "justify" ? horizontalJustifyOpts : horizontalAlignOpts;
+      const verticalOpts = verticalKey === "justify" ? verticalJustifyOpts : verticalAlignOpts;
+      const horizontalValue = horizontalOpts.some((o) => o.value === horizontalValueRaw)
+        ? horizontalValueRaw
+        : "start";
+      const verticalValue = verticalOpts.some((o) => o.value === verticalValueRaw)
+        ? verticalValueRaw
+        : "start";
       return (
         <>
           <Field label="Label">
@@ -96,27 +225,17 @@ function KindFields({
               <NumberInput value={p.columns ?? 2} min={1} max={12} onChange={(v) => onChange({ columns: v })} />
             </Field>
           )}
-          <Field label="가로 정렬 (좌/중앙/우)">
+          <Field label="가로 정렬">
             <SegmentedControl
               value={horizontalValue}
-              options={[
-                { value: "start", label: "좌측" },
-                { value: "center", label: "중앙" },
-                { value: "end", label: "우측" },
-                { value: "between", label: "균등" },
-              ]}
+              options={horizontalOpts.map((o) => ({ value: o.value, label: o.label }))}
               onChange={(v) => onChange({ [horizontalKey]: v })}
             />
           </Field>
-          <Field label="세로 정렬 (상/중앙/하)">
+          <Field label="세로 정렬">
             <SegmentedControl
               value={verticalValue}
-              options={[
-                { value: "start", label: "상단" },
-                { value: "center", label: "중앙" },
-                { value: "end", label: "하단" },
-                { value: "stretch", label: "채움" },
-              ]}
+              options={verticalOpts.map((o) => ({ value: o.value, label: o.label }))}
               onChange={(v) => onChange({ [verticalKey]: v })}
             />
           </Field>
@@ -154,14 +273,39 @@ function KindFields({
                   onChange={(v) => onChange({ borderWidth: v })}
                 />
               </Field>
-              <Field label="Border Color (hex)">
-                <TextInput
-                  value={p.borderColor ?? "#525252"}
-                  onChange={(v) => onChange({ borderColor: v })}
-                />
+              <Field label="Border Color">
+                <ColorPicker value={p.borderColor ?? "#525252"} onChange={(v) => onChange({ borderColor: v })} />
               </Field>
             </>
           )}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-neutral-400">배경 농도</span>
+              {p.backgroundOpacity !== undefined && (
+                <button
+                  type="button"
+                  onClick={() => onChange({ backgroundOpacity: undefined })}
+                  className="text-[10px] text-neutral-500 hover:text-neutral-300"
+                  title="테마 기본값으로 재설정"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={p.backgroundOpacity ?? 80}
+                onChange={(e) => onChange({ backgroundOpacity: Number(e.target.value) })}
+                className="flex-1 accent-sky-500"
+              />
+              <span className="w-8 text-right text-xs tabular-nums text-neutral-300">
+                {p.backgroundOpacity !== undefined ? `${p.backgroundOpacity}%` : "–"}
+              </span>
+            </div>
+          </div>
         </>
       );
     }
@@ -199,6 +343,9 @@ function KindFields({
               onChange={(v) => onChange({ weight: v })}
             />
           </Field>
+          <Field label="Color">
+            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
+          </Field>
         </>
       );
     }
@@ -212,7 +359,7 @@ function KindFields({
           <Field label="Variant">
             <Select
               value={p.variant ?? "primary"}
-              options={["primary", "secondary", "destructive", "ghost"]}
+              options={["primary", "secondary", "destructive", "ghost", "plain"]}
               onChange={(v) => onChange({ variant: v })}
             />
           </Field>
@@ -237,6 +384,40 @@ function KindFields({
                 onChange={(v) => onChange({ iconPosition: v })}
               />
             </Field>
+          )}
+          <Field label="Content Align">
+            <SegmentedControl
+              value={p.contentAlign ?? "center"}
+              options={[
+                { value: "left", label: "←" },
+                { value: "center", label: "가운데" },
+                { value: "right", label: "→" },
+              ]}
+              onChange={(v) => onChange({ contentAlign: v })}
+            />
+          </Field>
+          <Field label="탭 그룹 ID">
+            <TextInput
+              value={p.tabGroupId ?? ""}
+              onChange={(v) => onChange({ tabGroupId: v || undefined })}
+            />
+          </Field>
+          {p.tabGroupId && (
+            <>
+              <Field label="기본 활성">
+                <Toggle
+                  value={p.tabDefaultActive ?? false}
+                  onChange={(v) => onChange({ tabDefaultActive: v })}
+                />
+              </Field>
+              <Field label="비활성 스타일">
+                <Select
+                  value={p.tabInactiveVariant ?? "ghost"}
+                  options={["primary", "secondary", "destructive", "ghost", "plain"]}
+                  onChange={(v) => onChange({ tabInactiveVariant: v })}
+                />
+              </Field>
+            </>
           )}
         </>
       );
@@ -323,11 +504,8 @@ function KindFields({
               onChange={(v) => onChange({ thickness: v })}
             />
           </Field>
-          <Field label="Color (hex)">
-            <TextInput
-              value={p.color ?? "#525252"}
-              onChange={(v) => onChange({ color: v })}
-            />
+          <Field label="Color">
+            <ColorPicker value={p.color ?? "#525252"} onChange={(v) => onChange({ color: v })} />
           </Field>
           <Field label="Label (선택)">
             <TextInput
@@ -348,13 +526,47 @@ function KindFields({
           <Field label="Size (px)">
             <NumberInput value={p.size ?? 20} min={8} max={128} onChange={(v) => onChange({ size: v })} />
           </Field>
-          <Field label="Color (hex)">
-            <TextInput value={p.color ?? ""} onChange={(v) => onChange({ color: v })} />
+          <Field label="Color">
+            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
         </>
       );
     }
+    case "module-ref": {
+      return <ModuleRefFields node={node} />;
+    }
   }
+}
+
+// module-ref 전용 인스펙터 필드 - 모듈 원본 이름 편집과 편집 모드 진입.
+function ModuleRefFields({ node }: { node: LayoutNode }) {
+  const p = node.props as ModuleRefProps;
+  const mod = useLayoutStore((s) => s.document.modules.find((m) => m.id === p.moduleId));
+  const updateModule = useLayoutStore((s) => s.updateModule);
+  const enterModuleEdit = useLayoutStore((s) => s.enterModuleEdit);
+
+  if (!mod) {
+    return (
+      <Field label="Module">
+        <div className="text-xs text-rose-400">참조 모듈이 삭제되었습니다 (id: {p.moduleId}).</div>
+      </Field>
+    );
+  }
+  return (
+    <>
+      <Field label="Module Name">
+        <TextInput value={mod.name} onChange={(v) => updateModule(mod.id, { name: v })} />
+      </Field>
+      <Field label="Action">
+        <button
+          onClick={() => enterModuleEdit(mod.id)}
+          className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1.5 text-xs text-sky-200 hover:bg-sky-500/20"
+        >
+          모듈 편집으로 이동
+        </button>
+      </Field>
+    </>
+  );
 }
 
 // Uniform 체크박스 + 단일/4방향 입력을 동시에 처리하는 Padding 편집기
@@ -590,16 +802,19 @@ function Btn({
   onClick,
   disabled,
   danger,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         "rounded-md border px-2 py-1 text-xs transition",
         disabled

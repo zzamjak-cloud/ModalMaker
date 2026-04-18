@@ -1,7 +1,7 @@
 // 뷰포트 프리셋 드롭다운 + Custom 입력 + Safe Area % 입력
 import { Monitor } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, currentPage } from "@/stores/layoutStore";
 import { type ViewportSettings } from "@/types/layout";
 
 type Preset = ViewportSettings["preset"];
@@ -16,7 +16,9 @@ const PRESET_LABEL: Record<Preset, string> = {
 };
 
 export function ViewportSelector() {
-  const viewport = useLayoutStore((s) => s.document.viewport) ?? { preset: "free" as Preset };
+  const viewport =
+    useLayoutStore((s) => currentPage(s.document)?.viewport) ??
+    ({ preset: "free" as Preset });
   const updateViewport = useLayoutStore((s) => s.updateViewport);
 
   const preset = viewport.preset;
