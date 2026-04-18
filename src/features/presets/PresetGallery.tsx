@@ -5,7 +5,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, cloneWithNewIds, createEmptyDocument } from "@/stores/layoutStore";
+import {
+  useLayoutStore,
+  cloneDocumentWithNewIds,
+  cloneWithNewIds,
+  createEmptyDocument,
+} from "@/stores/layoutStore";
 import { BUILTIN_PRESETS, PRESET_CATEGORIES, type PresetCategory, type PresetEntry } from "./presetRegistry";
 import { currentAdapter } from "@/features/persistence";
 import type { LayoutDocument } from "@/types/layout";
@@ -29,27 +34,19 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
   }, [tab]);
 
   function loadPreset(entry: PresetEntry) {
-    const now = Date.now();
-    setDocument({
-      ...entry.document,
-      id: newId("doc"),
-      title: entry.document.title,
-      root: cloneWithNewIds(entry.document.root),
-      createdAt: now,
-      updatedAt: now,
-    });
+    // v2 NodeDocument → 전체 페이지/모듈/엣지 id를 한 번에 재매핑해 다중 로드 충돌 방지
+    const cloned = cloneDocumentWithNewIds(entry.document, entry.document.title);
+    setDocument(cloned);
     onClose();
   }
 
   function loadUserPreset(d: LayoutDocument) {
-    const now = Date.now();
+    // 사용자 프리셋은 여전히 v1 구조로 저장됨. setDocument가 자동으로 v2 마이그레이션 수행.
     setDocument({
       ...d,
       id: newId("doc"),
-      title: d.title,
       root: cloneWithNewIds(d.root),
-      createdAt: now,
-      updatedAt: now,
+      updatedAt: Date.now(),
     });
     onClose();
   }

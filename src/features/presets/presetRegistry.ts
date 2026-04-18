@@ -1,7 +1,14 @@
 // 내장 프리셋 레지스트리
 // JSON 파일 대신 TS로 구성해 타입 안전성 + 번들 최적화를 확보.
-// 각 프리셋은 LayoutDocument 포맷을 그대로 따르며, 로드 시 cloneWithNewIds로 ID만 재발급.
-import type { LayoutDocument, LayoutNode, NodeKind, NodeProps, SizingProps } from "@/types/layout";
+// 각 프리셋은 NodeDocument(v2) 포맷을 직접 반환하므로 로드 시 마이그레이션이 필요 없다.
+import type {
+  LayoutNode,
+  NodeDocument,
+  NodeKind,
+  NodeProps,
+  Page,
+  SizingProps,
+} from "@/types/layout";
 import { newId } from "@/lib/id";
 
 export type PresetCategory = "Confirmation" | "Alert" | "Info" | "Auth" | "Form" | "Flow" | "Utility" | "Layout";
@@ -13,7 +20,7 @@ export interface PresetEntry {
   category: PresetCategory;
   // 썸네일 대신 emoji 심볼 (Phase 7에서 이미지 자동 생성 예정)
   icon: string;
-  document: LayoutDocument;
+  document: NodeDocument;
 }
 
 // 간결한 노드 빌더 (선택적 sizing 인자 지원)
@@ -29,9 +36,27 @@ function n(kind: NodeKind, props: NodeProps, children?: LayoutNode[], sizing?: S
   return node;
 }
 
-function doc(title: string, root: LayoutNode): LayoutDocument {
+// v2 NodeDocument 생성: 단일 페이지를 감싼 형태로 반환
+function doc(title: string, root: LayoutNode): NodeDocument {
   const now = Date.now();
-  return { id: newId("doc"), title, root, createdAt: now, updatedAt: now };
+  const pageId = newId("page");
+  const page: Page = {
+    id: pageId,
+    title,
+    root,
+    position: { x: 0, y: 0 },
+  };
+  return {
+    id: newId("doc"),
+    title,
+    pages: [page],
+    modules: [],
+    edges: [],
+    currentPageId: pageId,
+    createdAt: now,
+    updatedAt: now,
+    schemaVersion: 2,
+  };
 }
 
 // --- 프리셋 정의 ---
