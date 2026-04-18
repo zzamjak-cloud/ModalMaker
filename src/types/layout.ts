@@ -114,6 +114,26 @@ export type NodeProps =
   | IconProps
   | ModuleRefProps;
 
+// 인터렉션 이벤트
+export type InteractionEvent =
+  | "click"
+  | "hover"
+  | "press"
+  | "release"
+  | "disabled";
+
+// 인터렉션 액션
+export type InteractionAction =
+  | { type: "navigate"; targetPageId: string }
+  | { type: "close" }
+  | { type: "applyStyle"; stylePresetId: string };
+
+export interface Interaction {
+  id: string;
+  event: InteractionEvent;
+  action: InteractionAction;
+}
+
 // 모든 노드에 공용 적용되는 크기 제어.
 // 레거시 fixedSize=true는 widthFixed·heightFixed가 없을 때 양축 모두 고정으로 간주.
 export interface SizingProps {
@@ -138,6 +158,7 @@ export interface LayoutNode {
    * push-start: 주축 시작 방향으로 margin:auto
    */
   flexMainAxis?: "push-end" | "push-start";
+  interactions?: Interaction[]; // 순서는 우선순위와 무관, event별로 한 개씩만 의미있음
   style?: Partial<CSSProperties>;
   children?: LayoutNode[]; // container/foldable만 사용
 }

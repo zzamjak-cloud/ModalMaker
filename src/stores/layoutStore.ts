@@ -10,6 +10,9 @@ import { migrateToV2 } from "@/lib/migrate";
 import { mergeSizingPatch } from "@/lib/layoutSizing";
 import {
   isContainerKind,
+  type Interaction,
+  type InteractionAction,
+  type InteractionEvent,
   type LayoutDocument,
   type LayoutNode,
   type Module,
@@ -168,6 +171,8 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
     id: newId(),
     props: { ...node.props },
     sizing: node.sizing ? { ...node.sizing } : undefined,
+    // interactions도 새 id로 깊이 복사해 참조 충돌 방지
+    interactions: node.interactions?.map((i) => ({ ...i, id: newId("int") })),
     children: node.children?.map(cloneWithNewIds),
   };
 }
@@ -271,6 +276,9 @@ export interface LayoutState {
     },
   ) => void;
   updateSizing: (id: string, patch: Partial<SizingProps>) => void;
+  addInteraction: (nodeId: string, event: InteractionEvent, action: InteractionAction) => Interaction | null;
+  updateInteraction: (nodeId: string, interactionId: string, patch: Partial<Omit<Interaction, "id">>) => void;
+  removeInteraction: (nodeId: string, interactionId: string) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
   undo: () => void;
@@ -417,6 +425,51 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     ),
 
   updateSizing: (id, patch) => get().patchNode(id, { sizing: patch }),
+
+  addInteraction: (nodeId, event, action) => {
+    let created: Interaction | null = null;
+    set((s) =>
+      commit(s, (draft) => {
+        const draftRoot = activeRootInDraft(draft, s.editingModuleId);
+        if (!draftRoot) return;
+        const node = findNode(draftRoot, nodeId);
+        if (!node) return;
+        const entry: Interaction = {
+          id: newId("int"),
+          event,
+          action,
+        };
+        node.interactions = [...(node.interactions ?? []), entry];
+        created = entry;
+      }),
+    );
+    return created;
+  },
+
+  updateInteraction: (nodeId, interactionId, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const draftRoot = activeRootInDraft(draft, s.editingModuleId);
+        if (!draftRoot) return;
+        const node = findNode(draftRoot, nodeId);
+        if (!node?.interactions) return;
+        const idx = node.interactions.findIndex((i) => i.id === interactionId);
+        if (idx < 0) return;
+        node.interactions[idx] = { ...node.interactions[idx], ...patch };
+      }),
+    ),
+
+  removeInteraction: (nodeId, interactionId) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const draftRoot = activeRootInDraft(draft, s.editingModuleId);
+        if (!draftRoot) return;
+        const node = findNode(draftRoot, nodeId);
+        if (!node?.interactions) return;
+        node.interactions = node.interactions.filter((i) => i.id !== interactionId);
+        if (node.interactions.length === 0) delete node.interactions;
+      }),
+    ),
 
   updateTitle: (title) =>
     set((s) =>
