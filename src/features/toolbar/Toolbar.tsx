@@ -1,8 +1,6 @@
-// 상단 툴바
-// - 문서 제목 편집
-// - Undo / Redo / Save / Load
-// - Export (Markdown / JSON / Mermaid) + 복사 / 다운로드 + AI 프롬프트 토글
-// - 프리셋으로 저장
+// 상단 툴바 — 두 줄 레이아웃
+// Row 1 (파일·모드·계정 — 전역): 로고, Canvas/Node 토글, New/Save/Save As/Load/프리셋으로 저장, Auth
+// Row 2 (편집·문서 속성 — 현재 문서): Undo/Redo, 제목, Viewport(Canvas 모드), 상태, Export
 import { useState } from "react";
 import {
   Undo2,
@@ -10,8 +8,6 @@ import {
   Save,
   FolderOpen,
   Download,
-  Copy,
-  Sparkles,
   Plus,
   Bookmark,
   Layers,
@@ -20,17 +16,8 @@ import {
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useGlobalShortcuts } from "@/lib/history";
-import {
-  EXPORT_FORMAT_EXT,
-  EXPORT_FORMAT_LABEL,
-  toJson,
-  toMarkdown,
-  toMermaid,
-  type ExportFormat,
-} from "@/features/export";
 import { currentAdapter } from "@/features/persistence";
 import { AuthButton } from "@/features/auth/AuthButton";
-import { saveTextFile } from "@/lib/tauri";
 import {
   cloneDocumentWithNewIds,
   cloneWithNewIds,
@@ -40,6 +27,7 @@ import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { ViewportSelector } from "./ViewportSelector";
+import { ExportDialog } from "./ExportDialog";
 
 interface Props {
   onNewClick: () => void;
@@ -57,14 +45,11 @@ export function Toolbar({ onNewClick }: Props) {
   const mode = useLayoutStore((s) => s.mode);
   const setMode = useLayoutStore((s) => s.setMode);
 
-  const [includePrompt, setIncludePrompt] = useState(false);
-  const [format, setFormat] = useState<ExportFormat>("markdown");
   const [status, setStatus] = useState<string | null>(null);
   const [savedDocs, setSavedDocs] = useState<NodeDocument[]>([]);
   const [openLoad, setOpenLoad] = useState(false);
   const [openSaveAs, setOpenSaveAs] = useState(false);
-
-  const exported = renderExport(doc, format, includePrompt);
+  const [openExport, setOpenExport] = useState(false);
 
   async function save() {
     try {
@@ -127,16 +112,6 @@ export function Toolbar({ onNewClick }: Props) {
     setOpenLoad(false);
   }
 
-  async function copyExport() {
-    await navigator.clipboard.writeText(exported);
-    flash(`${EXPORT_FORMAT_LABEL[format]} 복사됨`);
-  }
-
-  async function downloadExport() {
-    const filename = `${slug(doc.title)}.${EXPORT_FORMAT_EXT[format]}`;
-    await saveTextFile(filename, exported);
-  }
-
   function flash(msg: string) {
     setStatus(msg);
     setTimeout(() => setStatus(null), 1800);
@@ -144,132 +119,107 @@ export function Toolbar({ onNewClick }: Props) {
 
   return (
     <>
-      <div className="flex items-center gap-3 border-b border-neutral-800 bg-neutral-900 px-4 py-2">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col border-b border-neutral-800 bg-neutral-900">
+        {/* Row 1 — 파일·모드·계정 */}
+        <div className="flex items-center gap-3 border-b border-neutral-800/60 px-4 py-2">
           <div className="text-sm font-bold tracking-tight">
             <span className="text-sky-400">▤</span> ModalMaker
           </div>
-        </div>
 
-        <div className="h-5 w-px bg-neutral-800" />
+          <div className="h-5 w-px bg-neutral-800" />
 
-        <ToolbarButton onClick={onNewClick} title="새 문서 / 프리셋 선택">
-          <Plus size={14} />
-          <span>New</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={save} title="로컬에 저장 (IndexedDB)">
-          <Save size={14} />
-          <span>Save</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={() => setOpenSaveAs(true)} title="다른 이름으로 저장">
-          <Save size={14} />
-          <span>Save As</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={openLoadDialog} title="저장된 문서 불러오기">
-          <FolderOpen size={14} />
-          <span>Load</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={saveAsPreset} title="현재 캔버스를 프리셋으로 저장">
-          <Bookmark size={14} />
-          <span>프리셋으로 저장</span>
-        </ToolbarButton>
-
-        <div className="h-5 w-px bg-neutral-800" />
-
-        <ToolbarButton onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
-          <Undo2 size={14} />
-        </ToolbarButton>
-        <ToolbarButton onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)">
-          <Redo2 size={14} />
-        </ToolbarButton>
-
-        <div className="h-5 w-px bg-neutral-800" />
-
-        <input
-          value={doc.title}
-          onChange={(e) => updateTitle(e.target.value)}
-          className="w-48 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
-          placeholder="제목"
-        />
-
-        <div className="h-5 w-px bg-neutral-800" />
-
-        {/* Canvas / Node 모드 토글 */}
-        <div className="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
-          <button
-            onClick={() => setMode("canvas")}
-            className={cn(
-              "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
-              mode === "canvas"
-                ? "bg-sky-500/20 text-sky-200"
-                : "text-neutral-400 hover:text-neutral-200",
-            )}
-            title="Canvas 편집 모드"
-          >
-            <Layers size={12} />
-            Canvas
-          </button>
-          <button
-            onClick={() => setMode("node")}
-            className={cn(
-              "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
-              mode === "node"
-                ? "bg-sky-500/20 text-sky-200"
-                : "text-neutral-400 hover:text-neutral-200",
-            )}
-            title="Node View (페이지 다이어그램)"
-          >
-            <LayoutGrid size={12} />
-            Node
-          </button>
-        </div>
-
-        {mode === "canvas" && (
-          <>
-            <div className="h-5 w-px bg-neutral-800" />
-            <ViewportSelector />
-          </>
-        )}
-
-        <div className="flex-1" />
-
-        {status && <div className="text-xs text-sky-400">{status}</div>}
-
-        <div className="flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
-          {(Object.keys(EXPORT_FORMAT_LABEL) as ExportFormat[]).map((f) => (
+          {/* Canvas / Node 모드 토글 */}
+          <div className="flex items-center gap-0.5 rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
             <button
-              key={f}
-              onClick={() => setFormat(f)}
+              onClick={() => setMode("canvas")}
               className={cn(
-                "rounded px-2 py-1 text-xs",
-                format === f ? "bg-sky-500/20 text-sky-200" : "text-neutral-400 hover:text-neutral-200",
+                "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+                mode === "canvas"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-neutral-400 hover:text-neutral-200",
               )}
+              title="Canvas 편집 모드"
             >
-              {EXPORT_FORMAT_LABEL[f]}
+              <Layers size={12} />
+              Canvas
             </button>
-          ))}
+            <button
+              onClick={() => setMode("node")}
+              className={cn(
+                "inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+                mode === "node"
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-neutral-400 hover:text-neutral-200",
+              )}
+              title="Node View (페이지 다이어그램)"
+            >
+              <LayoutGrid size={12} />
+              Node
+            </button>
+          </div>
+
+          <div className="h-5 w-px bg-neutral-800" />
+
+          <ToolbarButton onClick={onNewClick} title="새 문서 / 프리셋 선택">
+            <Plus size={14} />
+            <span>New</span>
+          </ToolbarButton>
+          <ToolbarButton onClick={save} title="로컬에 저장 (IndexedDB)">
+            <Save size={14} />
+            <span>Save</span>
+          </ToolbarButton>
+          <ToolbarButton onClick={() => setOpenSaveAs(true)} title="다른 이름으로 저장">
+            <Save size={14} />
+            <span>Save As</span>
+          </ToolbarButton>
+          <ToolbarButton onClick={openLoadDialog} title="저장된 문서 불러오기">
+            <FolderOpen size={14} />
+            <span>Load</span>
+          </ToolbarButton>
+          <ToolbarButton onClick={saveAsPreset} title="현재 캔버스를 프리셋으로 저장">
+            <Bookmark size={14} />
+            <span>프리셋으로 저장</span>
+          </ToolbarButton>
+
+          <div className="flex-1" />
+
+          <AuthButton />
         </div>
 
-        <ToolbarButton
-          onClick={() => setIncludePrompt((v) => !v)}
-          title="AI 프롬프트 프리픽스 포함"
-          active={includePrompt}
-        >
-          <Sparkles size={14} />
-        </ToolbarButton>
+        {/* Row 2 — 편집·문서 속성 */}
+        <div className="flex items-center gap-3 px-4 py-2">
+          <ToolbarButton onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
+            <Undo2 size={14} />
+          </ToolbarButton>
+          <ToolbarButton onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)">
+            <Redo2 size={14} />
+          </ToolbarButton>
 
-        <ToolbarButton onClick={copyExport} title="Export 내용 복사">
-          <Copy size={14} />
-          <span>복사</span>
-        </ToolbarButton>
-        <ToolbarButton onClick={downloadExport} title="파일로 다운로드/저장">
-          <Download size={14} />
-          <span>Export</span>
-        </ToolbarButton>
+          <div className="h-5 w-px bg-neutral-800" />
 
-        <div className="h-5 w-px bg-neutral-800" />
+          <input
+            value={doc.title}
+            onChange={(e) => updateTitle(e.target.value)}
+            className="w-56 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
+            placeholder="제목"
+          />
 
-        <AuthButton />
+          {mode === "canvas" && (
+            <>
+              <div className="h-5 w-px bg-neutral-800" />
+              <ViewportSelector />
+            </>
+          )}
+
+          <div className="flex-1" />
+
+          {status && <div className="text-xs text-sky-400">{status}</div>}
+
+          <ToolbarButton onClick={() => setOpenExport(true)} title="Export (MD / JSON / Mermaid)">
+            <Download size={14} />
+            <span>Export</span>
+          </ToolbarButton>
+        </div>
       </div>
 
       {openLoad && (
@@ -282,17 +232,24 @@ export function Toolbar({ onNewClick }: Props) {
           onConfirm={saveAs}
         />
       )}
+      {openExport && (
+        <ExportDialog
+          doc={currentPageAsLayoutDoc(doc)}
+          onClose={() => setOpenExport(false)}
+          onFlash={flash}
+        />
+      )}
     </>
   );
 }
 
-// Export 함수들은 아직 v1 LayoutDocument 형태를 입력으로 받는다.
-// Phase A에서는 현재 페이지를 LayoutDocument로 축약해 전달 (모듈/엣지 미포함).
-function renderExport(doc: NodeDocument, format: ExportFormat, includePrompt: boolean): string {
-  const page = currentPage(doc);
-  const legacy: LayoutDocument = {
+// 현재 페이지를 v1 LayoutDocument 형태로 synthesize해 Export 모듈로 전달한다.
+// Phase A 기준으로 Export 함수들이 아직 v1 입력을 받기 때문이다.
+function currentPageAsLayoutDoc(doc: NodeDocument): LayoutDocument {
+  const page = currentPage(doc) ?? doc.pages[0];
+  return {
     id: doc.id,
-    title: doc.title,
+    title: page?.title ?? doc.title,
     root: page?.root ?? {
       id: "empty",
       kind: "container",
@@ -304,14 +261,6 @@ function renderExport(doc: NodeDocument, format: ExportFormat, includePrompt: bo
     updatedAt: doc.updatedAt,
     ownerUid: doc.ownerUid,
   };
-  switch (format) {
-    case "json":
-      return toJson(legacy);
-    case "markdown":
-      return toMarkdown(legacy, { includePrompt });
-    case "mermaid":
-      return toMermaid(legacy);
-  }
 }
 
 function readableError(err: unknown): string {
@@ -322,15 +271,6 @@ function readableError(err: unknown): string {
     return err.message.slice(0, 80);
   }
   return String(err).slice(0, 80);
-}
-
-function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "modalmaker";
 }
 
 function ToolbarButton({
