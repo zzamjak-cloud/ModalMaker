@@ -125,7 +125,7 @@ export type InteractionEvent =
 // 인터렉션 액션
 export type InteractionAction =
   | { type: "navigate"; targetPageId: string }
-  | { type: "close" }
+  | { type: "close"; targetPageId?: string }
   | { type: "applyStyle"; stylePresetId: string };
 
 export interface Interaction {

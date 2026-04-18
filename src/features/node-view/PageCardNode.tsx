@@ -17,6 +17,7 @@ type PageCardRFNode = Node<{ pageId: string }, "pageCard">;
 export const PageCardNode = memo(function PageCardNode({
   data,
   selected,
+  dragging,
 }: NodeProps<PageCardRFNode>) {
   const page = useLayoutStore((s) =>
     s.document.pages.find((p) => p.id === data.pageId),
@@ -31,12 +32,14 @@ export const PageCardNode = memo(function PageCardNode({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-md border bg-neutral-950 shadow-lg",
-        selected
-          ? "border-sky-500 ring-2 ring-sky-500/40"
-          : isCurrent
-            ? "border-sky-500/50"
-            : "border-neutral-800",
+        "relative overflow-hidden rounded-md border bg-neutral-950 shadow-lg transition-shadow",
+        dragging
+          ? "border-sky-400 shadow-2xl shadow-sky-500/30 opacity-90 ring-2 ring-sky-400/50"
+          : selected
+            ? "border-sky-500 ring-2 ring-sky-500/40"
+            : isCurrent
+              ? "border-sky-500/50"
+              : "border-neutral-800",
       )}
       style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
     >

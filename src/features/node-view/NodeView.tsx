@@ -1,7 +1,8 @@
 // Node View - 페이지들을 2D 다이어그램으로 표시하고 줌/팬/엣지 연결을 제공.
 // ReactFlow로 랩핑. 노드는 PageCardNode 커스텀 타입 하나만 사용.
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  applyNodeChanges,
   Background,
   Controls,
   MiniMap,
@@ -55,16 +56,20 @@ export function NodeView() {
 
   const [showAddDialog, setShowAddDialog] = useState(false);
 
-  const rfNodes: RFPage[] = useMemo(
-    () =>
-      pages.map((p) => ({
-        id: p.id,
-        type: "pageCard",
-        position: p.position,
-        data: { pageId: p.id },
-      })),
-    [pages],
-  );
+  function toRFNode(p: (typeof pages)[number]): RFPage {
+    return { id: p.id, type: "pageCard", position: p.position, data: { pageId: p.id } };
+  }
+
+  const [rfNodes, setRfNodes] = useState<RFPage[]>(() => pages.map(toRFNode));
+
+  // 페이지 추가/삭제 시 로컬 노드 목록을 동기화. 드래그 중 위치는 로컬 상태가 관리하므로 덮어쓰지 않는다.
+  useEffect(() => {
+    setRfNodes((current) => {
+      const currentMap = new Map(current.map((n) => [n.id, n]));
+      return pages.map((p) => currentMap.get(p.id) ?? toRFNode(p));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages]);
 
   // 인터렉션(click→navigate) 기반 자동 엣지 - document.edges에 저장하지 않고 파생.
   const autoEdges: Edge[] = useMemo(() => {
@@ -110,9 +115,10 @@ export function NodeView() {
     [edges, autoEdges],
   );
 
-  // 드래그 중 계속 position 반영하지 않고, stop에서만 store에 commit.
+  // 드래그 중 로컬 상태를 즉시 갱신해 시각적 피드백 제공. 드래그 완료 시에만 store에 commit.
   const onNodesChange: OnNodesChange<RFPage> = useCallback(
     (changes) => {
+      setRfNodes((nds) => applyNodeChanges(changes, nds));
       for (const c of changes) {
         if (c.type === "position" && !c.dragging && c.position) {
           movePage(c.id, c.position.x, c.position.y);

@@ -26,7 +26,8 @@ export function PreviewOverlay() {
     [currentPageId, document.pages],
   );
 
-  const close = useCallback(() => setMode("canvas"), [setMode]);
+  const exitPreview = useCallback(() => setMode("canvas"), [setMode]);
+
   const back = useCallback(() => {
     setHistory((h) => {
       if (h.length === 0) return h;
@@ -35,6 +36,19 @@ export function PreviewOverlay() {
       return h.slice(0, -1);
     });
   }, []);
+
+  // 인터렉션 close 액션: 프리뷰를 종료하지 않고 뒤로 가거나 지정 페이지로 이동
+  const close = useCallback(
+    (targetPageId?: string) => {
+      if (targetPageId && document.pages.some((p) => p.id === targetPageId)) {
+        setHistory((h) => [...h, currentPageId]);
+        setCurrentPageId(targetPageId);
+      } else {
+        back();
+      }
+    },
+    [back, document.pages, currentPageId],
+  );
   const reset = useCallback(() => {
     setCurrentPageId(initialPageId);
     setHistory([]);
@@ -42,11 +56,11 @@ export function PreviewOverlay() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") exitPreview();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, [exitPreview]);
 
   const ctx: PreviewContext = { navigate, close };
 
@@ -75,7 +89,7 @@ export function PreviewOverlay() {
         <div className="mx-2 truncate text-sm text-neutral-200">{page?.title ?? "(빈 페이지)"}</div>
         <div className="flex-1" />
         <button
-          onClick={close}
+          onClick={exitPreview}
           className="inline-flex items-center gap-1 rounded-md border border-neutral-800 px-2 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
         >
           <X size={12} />

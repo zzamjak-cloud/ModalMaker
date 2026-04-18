@@ -5,7 +5,8 @@ import type { Interaction, InteractionAction, InteractionEvent } from "@/types/l
 
 export interface PreviewContext {
   navigate: (pageId: string) => void;
-  close: () => void;
+  // targetPageId 지정 시 해당 페이지로 이동, 미지정 시 히스토리 뒤로 가기 (프리뷰 종료 안 함)
+  close: (targetPageId?: string) => void;
 }
 
 export function runActions(
@@ -25,7 +26,7 @@ export function runAction(action: InteractionAction, ctx: PreviewContext): void 
       if (action.targetPageId) ctx.navigate(action.targetPageId);
       break;
     case "close":
-      ctx.close();
+      ctx.close(action.targetPageId);
       break;
     case "applyStyle":
       // applyStyle은 단일 발사형이 아니라 상태 기반이므로 여기서 아무것도 하지 않는다.

@@ -154,6 +154,28 @@ function InteractionRow({
         </label>
       )}
 
+      {actionType === "close" && (
+        <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+          <span className="w-14 shrink-0">이동 페이지</span>
+          <select
+            value={(it.action as { targetPageId?: string }).targetPageId ?? ""}
+            onChange={(e) =>
+              onChange({
+                action: { type: "close", targetPageId: e.target.value || undefined },
+              })
+            }
+            className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 py-1 text-xs text-neutral-100 focus:border-sky-500 focus:outline-none"
+          >
+            <option value="">(히스토리 뒤로 가기)</option>
+            {pages.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       {actionType === "applyStyle" && (
         <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
           <span className="w-14 shrink-0">스타일</span>
