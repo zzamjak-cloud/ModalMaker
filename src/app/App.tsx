@@ -6,10 +6,12 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  defaultDropAnimation,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
+  type DropAnimation,
 } from "@dnd-kit/core";
 import { Toolbar } from "@/features/toolbar/Toolbar";
 import { Palette } from "@/features/palette/Palette";
@@ -33,19 +35,30 @@ export default function App() {
   );
 
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [dropAnim, setDropAnim] = useState<DropAnimation | null>(defaultDropAnimation);
 
   const onDragStart = (e: DragStartEvent) => {
+    setDropAnim(defaultDropAnimation); // 새 드래그 시작 시 기본 애니메이션으로 복원
     const data = e.active.data.current as { source?: string; kind?: NodeKind; nodeId?: string };
     if (data?.source === "palette") setActiveLabel(`+ ${data.kind}`);
     else if (data?.source === "canvas") setActiveLabel("이동 중…");
   };
 
   const onDragEnd = (e: DragEndEvent) => {
-    setActiveLabel(null);
     const active = e.active.data.current as
       | { source?: "palette" | "canvas"; kind?: NodeKind; nodeId?: string }
       | undefined;
     const over = e.over?.data.current as { containerId?: string; index?: number } | undefined;
+
+    // 드롭 성공: 원위치 애니메이션 없이 즉시 제거
+    if (active && over?.containerId) {
+      setDropAnim(null);
+    } else {
+      // 드롭 실패: 기본 애니메이션으로 원위치 복귀 (시각적 실패 피드백)
+      setDropAnim(defaultDropAnimation);
+    }
+    setActiveLabel(null);
+
     if (!active || !over?.containerId) return;
 
     if (active.source === "palette" && active.kind) {
@@ -97,7 +110,7 @@ export default function App() {
         {galleryOpen && <PresetGallery onClose={() => setGalleryOpen(false)} />}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={dropAnim}>
         {activeLabel && (
           <div className="rounded-md bg-sky-500/90 px-3 py-1.5 text-sm text-white shadow-lg">
             {activeLabel}
