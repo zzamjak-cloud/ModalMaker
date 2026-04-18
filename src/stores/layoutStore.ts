@@ -31,6 +31,18 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
   switch (kind) {
     case "container":
       return { direction: "column", gap: 8, padding: 12, label: "Container" };
+    case "panel-layout":
+      return {
+        showHeader: true,
+        showFooter: false,
+        showLeft: true,
+        showRight: false,
+        headerHeight: 48,
+        footerHeight: 40,
+        leftWidth: 220,
+        rightWidth: 260,
+        label: "Panel Layout",
+      };
     case "foldable":
       return { title: "Section", open: true };
     case "text":

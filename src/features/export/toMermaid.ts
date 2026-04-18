@@ -7,6 +7,8 @@ function safeLabel(node: LayoutNode): string {
     switch (node.kind) {
       case "container":
         return (node.props as { label?: string }).label ?? "Container";
+      case "panel-layout":
+        return (node.props as { label?: string }).label ?? "Panel Layout";
       case "foldable":
         return (node.props as { title?: string }).title ?? "Foldable";
       case "text":
