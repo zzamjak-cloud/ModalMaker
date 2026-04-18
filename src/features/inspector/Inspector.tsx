@@ -1,6 +1,7 @@
 // 우측 속성 편집기 (Property Panel)
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
+import { Package } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
@@ -13,6 +14,7 @@ import type {
   IconProps,
   InputProps,
   LayoutNode,
+  ModuleRefProps,
   ProgressProps,
   SplitProps,
   TextProps,
@@ -21,9 +23,11 @@ import type {
 export function Inspector() {
   const root = useLayoutStore((s) => activeRoot(s));
   const selectedId = useLayoutStore((s) => s.selectedId);
+  const editingModuleId = useLayoutStore((s) => s.editingModuleId);
   const updateProps = useLayoutStore((s) => s.updateProps);
   const removeNode = useLayoutStore((s) => s.removeNode);
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
+  const registerModule = useLayoutStore((s) => s.registerModule);
 
   const node = useMemo(
     () => (selectedId && root ? findNode(root, selectedId) : null),
@@ -41,6 +45,12 @@ export function Inspector() {
     );
   }
 
+  // 모듈로 등록 가능 조건: 컨테이너 && 루트가 아님 && 이미 module-ref가 아님 && 모듈 편집 중이 아님
+  const canRegisterModule =
+    node.kind === "container" &&
+    node.id !== root?.id &&
+    !editingModuleId;
+
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
@@ -48,6 +58,14 @@ export function Inspector() {
           {node.kind}
         </div>
         <div className="flex gap-1">
+          <Btn
+            onClick={() => registerModule(node.id)}
+            disabled={!canRegisterModule}
+            title="이 컨테이너를 공용 모듈로 등록"
+          >
+            <Package size={12} className="mr-1 inline" />
+            모듈로 등록
+          </Btn>
           <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === root?.id}>
             복제
           </Btn>
@@ -357,7 +375,41 @@ function KindFields({
         </>
       );
     }
+    case "module-ref": {
+      return <ModuleRefFields node={node} />;
+    }
   }
+}
+
+// module-ref 전용 인스펙터 필드 - 모듈 원본 이름 편집과 편집 모드 진입.
+function ModuleRefFields({ node }: { node: LayoutNode }) {
+  const p = node.props as ModuleRefProps;
+  const mod = useLayoutStore((s) => s.document.modules.find((m) => m.id === p.moduleId));
+  const updateModule = useLayoutStore((s) => s.updateModule);
+  const enterModuleEdit = useLayoutStore((s) => s.enterModuleEdit);
+
+  if (!mod) {
+    return (
+      <Field label="Module">
+        <div className="text-xs text-rose-400">참조 모듈이 삭제되었습니다 (id: {p.moduleId}).</div>
+      </Field>
+    );
+  }
+  return (
+    <>
+      <Field label="Module Name">
+        <TextInput value={mod.name} onChange={(v) => updateModule(mod.id, { name: v })} />
+      </Field>
+      <Field label="Action">
+        <button
+          onClick={() => enterModuleEdit(mod.id)}
+          className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1.5 text-xs text-sky-200 hover:bg-sky-500/20"
+        >
+          모듈 편집으로 이동
+        </button>
+      </Field>
+    </>
+  );
 }
 
 // Uniform 체크박스 + 단일/4방향 입력을 동시에 처리하는 Padding 편집기
@@ -593,16 +645,19 @@ function Btn({
   onClick,
   disabled,
   danger,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
+  title?: string;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         "rounded-md border px-2 py-1 text-xs transition",
         disabled
