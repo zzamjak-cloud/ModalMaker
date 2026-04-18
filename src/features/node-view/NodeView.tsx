@@ -7,6 +7,7 @@ import {
   Controls,
   MiniMap,
   Panel,
+  PanOnScrollMode,
   ReactFlow,
   type Edge,
   type Node,
@@ -162,6 +163,12 @@ export function NodeView() {
         fitView
         proOptions={{ hideAttribution: true }}
         className="bg-neutral-950"
+        // 두 손가락 스크롤 → 패닝, 핀치(ctrl+wheel) → 줌, 세 손가락 드래그 → 노드 드래그
+        panOnScroll={true}
+        panOnScrollMode={PanOnScrollMode.Free}
+        zoomOnScroll={false}
+        zoomOnPinch={true}
+        panOnDrag={[1, 2]}
       >
         <Background color="#262626" />
         <MiniMap pannable zoomable className="!bg-neutral-900" />
