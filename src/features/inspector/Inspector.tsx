@@ -8,6 +8,7 @@ import { SizeSection } from "./SizeSection";
 import { FlexChildSection } from "./FlexChildSection";
 import { IconPicker } from "./IconPicker";
 import { InteractionSection } from "./InteractionSection";
+import { ColorPicker } from "./ColorPicker";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -208,11 +209,8 @@ function KindFields({
                   onChange={(v) => onChange({ borderWidth: v })}
                 />
               </Field>
-              <Field label="Border Color (hex)">
-                <TextInput
-                  value={p.borderColor ?? "#525252"}
-                  onChange={(v) => onChange({ borderColor: v })}
-                />
+              <Field label="Border Color">
+                <ColorPicker value={p.borderColor ?? "#525252"} onChange={(v) => onChange({ borderColor: v })} />
               </Field>
             </>
           )}
@@ -252,6 +250,9 @@ function KindFields({
               options={["normal", "medium", "bold"]}
               onChange={(v) => onChange({ weight: v })}
             />
+          </Field>
+          <Field label="Color">
+            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
         </>
       );
@@ -377,11 +378,8 @@ function KindFields({
               onChange={(v) => onChange({ thickness: v })}
             />
           </Field>
-          <Field label="Color (hex)">
-            <TextInput
-              value={p.color ?? "#525252"}
-              onChange={(v) => onChange({ color: v })}
-            />
+          <Field label="Color">
+            <ColorPicker value={p.color ?? "#525252"} onChange={(v) => onChange({ color: v })} />
           </Field>
           <Field label="Label (선택)">
             <TextInput
@@ -402,8 +400,8 @@ function KindFields({
           <Field label="Size (px)">
             <NumberInput value={p.size ?? 20} min={8} max={128} onChange={(v) => onChange({ size: v })} />
           </Field>
-          <Field label="Color (hex)">
-            <TextInput value={p.color ?? ""} onChange={(v) => onChange({ color: v })} />
+          <Field label="Color">
+            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
         </>
       );
