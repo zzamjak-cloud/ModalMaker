@@ -44,27 +44,27 @@ export function PanelLayoutRenderer({ node, depth }: { node: LayoutNode; depth: 
     <div className="relative rounded-md bg-neutral-900/40" style={style}>
       {showHeader && header && (
         <div style={{ gridArea: "h", overflow: "hidden" }}>
-          <SlotContainerRenderer node={header} depth={depth + 1} slotIndex={0} />
+          <SlotContainerRenderer node={header} depth={depth + 1} />
         </div>
       )}
       {showLeft && left && (
         <div style={{ gridArea: "l", overflow: "hidden" }}>
-          <SlotContainerRenderer node={left} depth={depth + 1} slotIndex={1} />
+          <SlotContainerRenderer node={left} depth={depth + 1} />
         </div>
       )}
       {main && (
         <div style={{ gridArea: "m", overflow: "hidden" }}>
-          <SlotContainerRenderer node={main} depth={depth + 1} slotIndex={2} />
+          <SlotContainerRenderer node={main} depth={depth + 1} />
         </div>
       )}
       {showRight && right && (
         <div style={{ gridArea: "r", overflow: "hidden" }}>
-          <SlotContainerRenderer node={right} depth={depth + 1} slotIndex={3} />
+          <SlotContainerRenderer node={right} depth={depth + 1} />
         </div>
       )}
       {showFooter && footer && (
         <div style={{ gridArea: "f", overflow: "hidden" }}>
-          <SlotContainerRenderer node={footer} depth={depth + 1} slotIndex={4} />
+          <SlotContainerRenderer node={footer} depth={depth + 1} />
         </div>
       )}
       {depth === 0 && (

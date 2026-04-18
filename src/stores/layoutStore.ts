@@ -190,6 +190,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const parent = findNode(draft.root, parentId);
         if (!parent || !isContainerKind(parent.kind)) return;
+        if (parent.kind === "panel-layout") return; // 5개 슬롯이 고정이므로 직접 자식 추가 금지
         parent.children ??= [];
         const i = index ?? parent.children.length;
         parent.children.splice(i, 0, node);
@@ -209,6 +210,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const sourceParent = findParent(draft.root, nodeId);
         const target = findNode(draft.root, targetParentId);
         if (!sourceParent || !target || !isContainerKind(target.kind)) return;
+        if (target.kind === "panel-layout") return; // panel-layout 직접 자식 위치 변경 금지
         // 자기 자신의 자손으로 이동하는 것 방지
         if (isAncestor(findNode(draft.root, nodeId)!, targetParentId)) return;
         const removed = removeFromParent(sourceParent, nodeId);
@@ -315,6 +317,7 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
     ...node,
     id: newId(),
     props: { ...node.props },
+    sizing: node.sizing ? { ...node.sizing } : undefined,
     children: node.children?.map(cloneWithNewIds),
   };
 }

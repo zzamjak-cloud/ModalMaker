@@ -40,7 +40,6 @@ export function SlotContainerRenderer({
 }: {
   node: LayoutNode;
   depth: number;
-  slotIndex: 0 | 1 | 2 | 3 | 4;
 }) {
   const p = node.props as ContainerProps;
   const gap = p.gap ?? 8;
@@ -76,13 +75,25 @@ export function SlotContainerRenderer({
           <DropZone containerId={node.id} variant="empty" />
         ) : (
           <>
-            <DropZone containerId={node.id} index={0} direction="column" />
-            {flow.map((c) => (
-              <Fragment key={c.id}>
-                <NodeRenderer node={c} depth={depth + 1} />
-                <DropZone containerId={node.id} index={children.findIndex((x) => x.id === c.id) + 1} direction="column" />
-              </Fragment>
-            ))}
+            {(() => {
+              const flowIndices = flow.map((f) => children.indexOf(f));
+              const firstFlowIdx = flowIndices[0] ?? children.length;
+              return (
+                <>
+                  <DropZone containerId={node.id} index={firstFlowIdx} direction="column" />
+                  {flow.map((c, i) => (
+                    <Fragment key={c.id}>
+                      <NodeRenderer node={c} depth={depth + 1} />
+                      <DropZone
+                        containerId={node.id}
+                        index={flowIndices[i] + 1}
+                        direction="column"
+                      />
+                    </Fragment>
+                  ))}
+                </>
+              );
+            })()}
           </>
         )}
       </div>
