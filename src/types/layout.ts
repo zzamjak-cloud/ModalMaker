@@ -43,6 +43,9 @@ export interface ContainerProps {
   borderStyle?: "none" | "solid" | "dashed" | "dotted"; // 기본 "none"
   borderWidth?: number; // 기본 1, 허용 범위 0~8
   borderColor?: string; // 기본 "#525252"
+
+  // 배경 농도: 0(투명)~100(불투명). undefined=테마 기본값 사용
+  backgroundOpacity?: number;
 }
 
 export interface TextProps {
@@ -54,10 +57,17 @@ export interface TextProps {
 
 export interface ButtonProps {
   label: string;
-  variant?: "primary" | "secondary" | "destructive" | "ghost";
+  variant?: "primary" | "secondary" | "destructive" | "ghost" | "plain";
   size?: "sm" | "md" | "lg";
   iconName?: string;                 // Lucide 아이콘 이름 (선택)
   iconPosition?: "left" | "right";   // 기본 "left"
+  contentAlign?: "left" | "center" | "right"; // fixed size 시 내용 정렬, 기본 "center"
+  /** 탭 그룹 ID — 같은 값끼리 토글 그룹 형성 */
+  tabGroupId?: string;
+  /** 프리뷰 초기 활성 버튼 여부 (그룹당 하나) */
+  tabDefaultActive?: boolean;
+  /** 비활성 상태 variant, 기본 "ghost" */
+  tabInactiveVariant?: "primary" | "secondary" | "destructive" | "ghost" | "plain";
 }
 
 export interface InputProps {
