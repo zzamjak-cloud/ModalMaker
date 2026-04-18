@@ -76,12 +76,16 @@ export function NodeRenderer({
   parentIsFlexContainer?: boolean;
 }) {
   const selectedId = useLayoutStore((s) => s.selectedId);
+  const selectedIds = useLayoutStore((s) => s.selectedIds);
   const select = useLayoutStore((s) => s.select);
+  const toggleSelectMulti = useLayoutStore((s) => s.toggleSelectMulti);
+  const clearMultiSelect = useLayoutStore((s) => s.clearMultiSelect);
 
   // 리프 인라인 편집 상태 (Text/Button 공유) - 활성 시 드래그 비활성
   const [editingLeaf, setEditingLeaf] = useState(false);
 
   const isSelected = selectedId === node.id;
+  const isInMultiSelect = selectedIds.includes(node.id);
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
@@ -89,17 +93,23 @@ export function NodeRenderer({
     disabled: depth === 0 || editingLeaf, // 루트/편집 중은 드래그 금지
   });
 
+  // ring은 box-shadow 기반이라 레이아웃에 영향 없음 — border 대신 ring 사용
   const outline = cn(
-    "relative rounded-md border transition",
-    isSelected
-      ? "border-sky-500 ring-2 ring-sky-500/40"
-      : "border-transparent hover:border-neutral-700",
+    "relative rounded-md transition",
+    isSelected || isInMultiSelect
+      ? "ring-2 ring-sky-500/80"
+      : "hover:ring-1 hover:ring-neutral-600",
     isDragging && "opacity-50",
   );
 
   const selectHandler = (e: React.MouseEvent) => {
     e.stopPropagation();
-    select(node.id);
+    if (e.ctrlKey || e.metaKey) {
+      toggleSelectMulti(node.id);
+    } else {
+      clearMultiSelect();
+      select(node.id);
+    }
   };
 
   // module-ref는 리프지만 내부적으로 다른 모듈 트리를 재귀 렌더하므로
@@ -139,7 +149,7 @@ export function NodeRenderer({
         {...listeners}
         {...attributes}
         onClick={selectHandler}
-        className={cn(outline, "relative px-1 py-0.5")}
+        className={cn(outline)}
         style={{
           ...applySizing(node),
           ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
@@ -162,6 +172,14 @@ export function NodeRenderer({
     const rawDir = p.direction ?? "column";
     const innerDir: ParentFlexDirection =
       rawDir === "grid" ? "grid" : rawDir === "row" ? "row" : "column";
+    // 캔버스에서 농도 변화가 시각적으로 보이도록 neutral-600(82,82,82) 기준색 사용
+    const bgStyle: React.CSSProperties =
+      p.backgroundOpacity !== undefined
+        ? { background: `rgba(82,82,82,${p.backgroundOpacity / 100})` }
+        : {};
+    const flexStyle = parentIsFlexContainer
+      ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis)
+      : {};
     return (
       <div
         ref={setNodeRef}
@@ -169,9 +187,7 @@ export function NodeRenderer({
         {...attributes}
         onClick={selectHandler}
         className={cn(outline, depth === 0 ? "min-w-[320px] bg-neutral-900/80" : "bg-neutral-900/40")}
-        style={
-          parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : undefined
-        }
+        style={{ ...flexStyle, ...bgStyle }}
       >
         {isFoldable && (
           <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300">
@@ -229,7 +245,7 @@ export function NodeRenderer({
       {...listeners}
       {...attributes}
       onClick={selectHandler}
-      className={cn(outline, "px-1 py-0.5")}
+      className={cn(outline)}
       style={{
         ...applySizing(node),
         ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
