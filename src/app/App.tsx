@@ -21,6 +21,7 @@ import { LayerTree } from "@/features/layer-tree/LayerTree";
 import { ModulePanel } from "@/features/modules/ModulePanel";
 import { NodeView } from "@/features/node-view/NodeView";
 import { PresetGallery } from "@/features/presets/PresetGallery";
+import { PreviewOverlay } from "@/features/preview/PreviewOverlay";
 import { useLayoutStore, createNode } from "@/stores/layoutStore";
 import { cn } from "@/lib/cn";
 import type { NodeKind } from "@/types/layout";
@@ -105,38 +106,42 @@ export default function App() {
         <Toolbar onNewClick={() => setGalleryOpen(true)} />
 
         <div className="flex flex-1 overflow-hidden">
-          {/* 좌측: 팔레트 + 수직 리사이저 + 계층 트리 */}
-          <aside className="flex w-64 flex-col border-r border-neutral-800 bg-neutral-900">
-            <div className="flex-1 overflow-y-auto">
-              <Palette />
-            </div>
-            <VerticalResizer
-              onResize={(absY, containerBottom) => {
-                const next = containerBottom - absY;
-                setLayerHeight(clamp(next, 100, 720));
-              }}
-            />
-            <div
-              className="flex flex-col overflow-hidden border-t border-neutral-800"
-              style={{ height: layerHeight }}
-            >
-              <div className="flex gap-1 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
-                <TabButton active={leftTab === "layers"} onClick={() => setLeftTab("layers")}>
-                  Layers
-                </TabButton>
-                <TabButton active={leftTab === "modules"} onClick={() => setLeftTab("modules")}>
-                  Modules
-                </TabButton>
-              </div>
+          {/* 좌측: 팔레트 + 수직 리사이저 + 계층 트리 (프리뷰 모드에서는 숨김) */}
+          {mode !== "preview" && (
+            <aside className="flex w-64 flex-col border-r border-neutral-800 bg-neutral-900">
               <div className="flex-1 overflow-y-auto">
-                {leftTab === "layers" ? <LayerTree /> : <ModulePanel />}
+                <Palette />
               </div>
-            </div>
-          </aside>
+              <VerticalResizer
+                onResize={(absY, containerBottom) => {
+                  const next = containerBottom - absY;
+                  setLayerHeight(clamp(next, 100, 720));
+                }}
+              />
+              <div
+                className="flex flex-col overflow-hidden border-t border-neutral-800"
+                style={{ height: layerHeight }}
+              >
+                <div className="flex gap-1 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
+                  <TabButton active={leftTab === "layers"} onClick={() => setLeftTab("layers")}>
+                    Layers
+                  </TabButton>
+                  <TabButton active={leftTab === "modules"} onClick={() => setLeftTab("modules")}>
+                    Modules
+                  </TabButton>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {leftTab === "layers" ? <LayerTree /> : <ModulePanel />}
+                </div>
+              </div>
+            </aside>
+          )}
 
-          {/* 중앙: 캔버스 또는 노드 뷰 */}
+          {/* 중앙: 캔버스 / 노드 뷰 / 프리뷰 */}
           <main className="flex min-h-0 flex-1 overflow-hidden bg-neutral-950">
-            {mode === "node" ? (
+            {mode === "preview" ? (
+              <PreviewOverlay />
+            ) : mode === "node" ? (
               <NodeView />
             ) : (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
@@ -145,10 +150,12 @@ export default function App() {
             )}
           </main>
 
-          {/* 우측: 인스펙터 */}
-          <aside className="w-80 overflow-y-auto border-l border-neutral-800 bg-neutral-900">
-            <Inspector />
-          </aside>
+          {/* 우측: 인스펙터 (프리뷰 모드에서는 숨김) */}
+          {mode !== "preview" && (
+            <aside className="w-80 overflow-y-auto border-l border-neutral-800 bg-neutral-900">
+              <Inspector />
+            </aside>
+          )}
         </div>
 
         {galleryOpen && <PresetGallery onClose={() => setGalleryOpen(false)} />}

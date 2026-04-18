@@ -14,6 +14,7 @@ import {
   Layers,
   LayoutGrid,
   Maximize2,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
@@ -260,6 +261,10 @@ export function Toolbar({ onNewClick }: Props) {
             </>
           )}
 
+          <ToolbarButton onClick={() => setMode("preview")} title="프리뷰 실행">
+            <Play size={14} />
+            <span>Preview</span>
+          </ToolbarButton>
           <ToolbarButton onClick={() => setOpenExport(true)} title="Export (MD / JSON / Mermaid)">
             <Download size={14} />
             <span>Export</span>
