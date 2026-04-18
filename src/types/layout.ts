@@ -10,6 +10,7 @@ export type NodeKind =
   | "input"
   | "checkbox"
   | "progress"
+  | "split" // 구분선 (solid/dashed/dotted, 가로/세로)
   | "foldable"; // 접힘 가능한 섹션. children 보유
 
 // 컨테이너/폴딩만 자식을 가진다. 그 외는 leaf.
@@ -23,7 +24,14 @@ export function isContainerKind(kind: NodeKind): boolean {
 export interface ContainerProps {
   direction?: "row" | "column" | "grid";
   gap?: number;
+  // Padding: uniformPadding=true(기본)이면 padding 한 값을 전 방향에 적용,
+  // false면 paddingTop/Right/Bottom/Left 개별 값 사용.
+  uniformPadding?: boolean;
   padding?: number;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
   align?: "start" | "center" | "end" | "stretch";
   justify?: "start" | "center" | "end" | "between" | "around";
   columns?: number; // grid 전용
@@ -66,6 +74,14 @@ export interface FoldableProps {
   open?: boolean;
 }
 
+export interface SplitProps {
+  orientation?: "horizontal" | "vertical";
+  style?: "solid" | "dashed" | "dotted";
+  thickness?: number;
+  color?: string;
+  label?: string;
+}
+
 export type NodeProps =
   | ContainerProps
   | TextProps
@@ -73,6 +89,7 @@ export type NodeProps =
   | InputProps
   | CheckboxProps
   | ProgressProps
+  | SplitProps
   | FoldableProps;
 
 export interface LayoutNode {

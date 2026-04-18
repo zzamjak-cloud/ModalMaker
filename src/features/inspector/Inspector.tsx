@@ -11,6 +11,7 @@ import type {
   InputProps,
   LayoutNode,
   ProgressProps,
+  SplitProps,
   TextProps,
 } from "@/types/layout";
 
@@ -65,6 +66,14 @@ function KindFields({
   switch (node.kind) {
     case "container": {
       const p = node.props as ContainerProps;
+      const direction = p.direction ?? "column";
+      const isRow = direction === "row";
+      // "가로 정렬"/"세로 정렬"을 direction에 따라 justify/align에 매핑.
+      // column: 가로=align(교차축), 세로=justify(주축) / row: 반대.
+      const horizontalKey = isRow ? "justify" : "align";
+      const verticalKey = isRow ? "align" : "justify";
+      const horizontalValue = (isRow ? p.justify : p.align) ?? "start";
+      const verticalValue = (isRow ? p.align : p.justify) ?? "start";
       return (
         <>
           <Field label="Label">
@@ -72,22 +81,52 @@ function KindFields({
           </Field>
           <Field label="Direction">
             <Select
-              value={p.direction ?? "column"}
+              value={direction}
               options={["column", "row", "grid"]}
               onChange={(v) => onChange({ direction: v })}
             />
           </Field>
-          {p.direction === "grid" && (
+          {direction === "grid" && (
             <Field label="Columns">
               <NumberInput value={p.columns ?? 2} min={1} max={12} onChange={(v) => onChange({ columns: v })} />
             </Field>
           )}
+          <Field label="가로 정렬 (좌/중앙/우)">
+            <SegmentedControl
+              value={horizontalValue}
+              options={[
+                { value: "start", label: "좌측" },
+                { value: "center", label: "중앙" },
+                { value: "end", label: "우측" },
+                { value: "between", label: "균등" },
+              ]}
+              onChange={(v) => onChange({ [horizontalKey]: v })}
+            />
+          </Field>
+          <Field label="세로 정렬 (상/중앙/하)">
+            <SegmentedControl
+              value={verticalValue}
+              options={[
+                { value: "start", label: "상단" },
+                { value: "center", label: "중앙" },
+                { value: "end", label: "하단" },
+                { value: "stretch", label: "채움" },
+              ]}
+              onChange={(v) => onChange({ [verticalKey]: v })}
+            />
+          </Field>
           <Field label="Gap">
             <NumberInput value={p.gap ?? 8} min={0} max={64} onChange={(v) => onChange({ gap: v })} />
           </Field>
-          <Field label="Padding">
-            <NumberInput value={p.padding ?? 12} min={0} max={64} onChange={(v) => onChange({ padding: v })} />
-          </Field>
+          <PaddingField
+            uniform={p.uniformPadding !== false}
+            uniformValue={p.padding ?? 12}
+            top={p.paddingTop ?? p.padding ?? 12}
+            right={p.paddingRight ?? p.padding ?? 12}
+            bottom={p.paddingBottom ?? p.padding ?? 12}
+            left={p.paddingLeft ?? p.padding ?? 12}
+            onChange={onChange}
+          />
         </>
       );
     }
@@ -201,7 +240,144 @@ function KindFields({
         </>
       );
     }
+    case "split": {
+      const p = node.props as SplitProps;
+      return (
+        <>
+          <Field label="Orientation">
+            <SegmentedControl
+              value={p.orientation ?? "horizontal"}
+              options={[
+                { value: "horizontal", label: "가로선" },
+                { value: "vertical", label: "세로선" },
+              ]}
+              onChange={(v) => onChange({ orientation: v })}
+            />
+          </Field>
+          <Field label="Style">
+            <SegmentedControl
+              value={p.style ?? "solid"}
+              options={[
+                { value: "solid", label: "실선" },
+                { value: "dashed", label: "대시" },
+                { value: "dotted", label: "점선" },
+              ]}
+              onChange={(v) => onChange({ style: v })}
+            />
+          </Field>
+          <Field label="Thickness (px)">
+            <NumberInput
+              value={p.thickness ?? 1}
+              min={1}
+              max={16}
+              onChange={(v) => onChange({ thickness: v })}
+            />
+          </Field>
+          <Field label="Color (hex)">
+            <TextInput
+              value={p.color ?? "#525252"}
+              onChange={(v) => onChange({ color: v })}
+            />
+          </Field>
+          <Field label="Label (선택)">
+            <TextInput
+              value={p.label ?? ""}
+              onChange={(v) => onChange({ label: v })}
+            />
+          </Field>
+        </>
+      );
+    }
   }
+}
+
+// Uniform 체크박스 + 단일/4방향 입력을 동시에 처리하는 Padding 편집기
+function PaddingField({
+  uniform,
+  uniformValue,
+  top,
+  right,
+  bottom,
+  left,
+  onChange,
+}: {
+  uniform: boolean;
+  uniformValue: number;
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-neutral-400">Padding</span>
+        <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+          <input
+            type="checkbox"
+            checked={uniform}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? { uniformPadding: true }
+                  : {
+                      uniformPadding: false,
+                      paddingTop: top,
+                      paddingRight: right,
+                      paddingBottom: bottom,
+                      paddingLeft: left,
+                    },
+              )
+            }
+            className="h-3.5 w-3.5 accent-sky-500"
+          />
+          Uniform
+        </label>
+      </div>
+      {uniform ? (
+        <NumberInput
+          value={uniformValue}
+          min={0}
+          max={64}
+          onChange={(v) => onChange({ padding: v })}
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          <LabeledNumber label="Top" value={top} onChange={(v) => onChange({ paddingTop: v })} />
+          <LabeledNumber label="Right" value={right} onChange={(v) => onChange({ paddingRight: v })} />
+          <LabeledNumber label="Bottom" value={bottom} onChange={(v) => onChange({ paddingBottom: v })} />
+          <LabeledNumber label="Left" value={left} onChange={(v) => onChange({ paddingLeft: v })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LabeledNumber({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="w-10 shrink-0 text-[10px] uppercase tracking-wider text-neutral-500">
+        {label}
+      </span>
+      <input
+        type="number"
+        value={value}
+        min={0}
+        max={64}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 py-1 text-xs text-neutral-100 focus:border-sky-500 focus:outline-none"
+      />
+    </label>
+  );
 }
 
 function findNode(root: LayoutNode, id: string): LayoutNode | null {
@@ -289,6 +465,37 @@ function Select<T extends string>({
         </option>
       ))}
     </select>
+  );
+}
+
+// 토글 그룹 - 짧은 라벨의 상호 배타 선택
+function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex gap-1 rounded-md border border-neutral-800 bg-neutral-950 p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "flex-1 rounded px-1.5 py-1 text-xs transition",
+            value === o.value
+              ? "bg-sky-500/25 text-sky-100 shadow-inner"
+              : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

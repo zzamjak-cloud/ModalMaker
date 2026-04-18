@@ -1,6 +1,9 @@
 // 재귀 노드 렌더러
 // 한 함수가 모든 NodeKind의 시각적 표현 + 중첩 children을 처리한다.
 // 컨테이너(container/foldable)는 내부 DropZone을 열어 드롭 대상이 된다.
+// 자식이 있을 때는 "자식 사이" 및 앞/뒤에 gap DropZone을 삽입해 원하는 index에 배치 가능.
+// Text 노드는 더블 클릭으로 인라인 편집이 가능하며, 편집 중에는 드래그가 비활성화된다.
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/cn";
 import { isContainerKind, type LayoutNode } from "@/types/layout";
@@ -13,32 +16,46 @@ import {
   FoldableProps,
   InputProps,
   ProgressProps,
+  SplitProps,
   TextProps,
 } from "@/types/layout";
 
 function containerStyle(p: ContainerProps): React.CSSProperties {
   const isGrid = p.direction === "grid";
-  return {
+  const base: React.CSSProperties = {
     display: isGrid ? "grid" : "flex",
     flexDirection: p.direction === "row" ? "row" : "column",
     gridTemplateColumns: isGrid ? `repeat(${p.columns ?? 2}, minmax(0,1fr))` : undefined,
     gap: p.gap ?? 8,
-    padding: p.padding ?? 12,
     alignItems: p.align,
     justifyContent: p.justify === "between" ? "space-between" : p.justify,
   };
+  // uniformPadding=false일 때만 방향별 개별 적용
+  const fallback = p.padding ?? 12;
+  if (p.uniformPadding === false) {
+    base.paddingTop = p.paddingTop ?? fallback;
+    base.paddingRight = p.paddingRight ?? fallback;
+    base.paddingBottom = p.paddingBottom ?? fallback;
+    base.paddingLeft = p.paddingLeft ?? fallback;
+  } else {
+    base.padding = fallback;
+  }
+  return base;
 }
 
 export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: number }) {
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
 
+  // Text 인라인 편집 상태 - 활성 시 드래그 비활성
+  const [editingText, setEditingText] = useState(false);
+
   const isSelected = selectedId === node.id;
 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
     data: { source: "canvas", nodeId: node.id },
-    disabled: depth === 0, // 루트는 드래그 불가
+    disabled: depth === 0 || editingText, // 루트 or 편집 중에는 드래그 금지
   });
 
   const outline = cn(
@@ -53,9 +70,6 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
     e.stopPropagation();
     select(node.id);
   };
-
-  // Leaf 렌더링
-  const content = renderLeaf(node);
 
   if (isContainerKind(node.kind)) {
     const p = node.props as ContainerProps & FoldableProps;
@@ -78,7 +92,23 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
         {open && (
           <div style={containerStyle(p)}>
             {node.children?.length ? (
-              node.children.map((c) => <NodeRenderer key={c.id} node={c} depth={depth + 1} />)
+              <>
+                <DropZone
+                  containerId={node.id}
+                  index={0}
+                  direction={p.direction ?? "column"}
+                />
+                {node.children.map((c, i) => (
+                  <Fragment key={c.id}>
+                    <NodeRenderer node={c} depth={depth + 1} />
+                    <DropZone
+                      containerId={node.id}
+                      index={i + 1}
+                      direction={p.direction ?? "column"}
+                    />
+                  </Fragment>
+                ))}
+              </>
             ) : (
               <DropZone containerId={node.id} variant="empty" />
             )}
@@ -101,33 +131,19 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       onClick={selectHandler}
       className={cn(outline, "px-1 py-0.5")}
     >
-      {content}
+      {renderLeaf(node, editingText, setEditingText)}
     </div>
   );
 }
 
-function renderLeaf(node: LayoutNode): React.ReactNode {
+function renderLeaf(
+  node: LayoutNode,
+  editing: boolean,
+  setEditing: (v: boolean) => void,
+): React.ReactNode {
   switch (node.kind) {
-    case "text": {
-      const p = node.props as TextProps;
-      const size = {
-        sm: "text-xs",
-        md: "text-sm",
-        lg: "text-base",
-        xl: "text-lg",
-        "2xl": "text-2xl",
-      }[p.size ?? "md"];
-      const weight = {
-        normal: "font-normal",
-        medium: "font-medium",
-        bold: "font-bold",
-      }[p.weight ?? "normal"];
-      return (
-        <span className={cn(size, weight, "text-neutral-100")} style={{ color: p.color }}>
-          {p.text || "Text"}
-        </span>
-      );
-    }
+    case "text":
+      return <TextLeaf node={node} editing={editing} setEditing={setEditing} />;
     case "button": {
       const p = node.props as ButtonProps;
       const variant = {
@@ -178,7 +194,139 @@ function renderLeaf(node: LayoutNode): React.ReactNode {
         </div>
       );
     }
+    case "split": {
+      const p = node.props as SplitProps;
+      const orientation = p.orientation ?? "horizontal";
+      const style = p.style ?? "solid";
+      const thickness = p.thickness ?? 1;
+      const color = p.color ?? "#525252"; // neutral-600
+      if (orientation === "vertical") {
+        return (
+          <div
+            aria-label="split"
+            style={{
+              borderLeftWidth: thickness,
+              borderLeftStyle: style,
+              borderLeftColor: color,
+              minHeight: 24,
+              alignSelf: "stretch",
+            }}
+          />
+        );
+      }
+      return (
+        <div
+          aria-label="split"
+          style={{
+            borderTopWidth: thickness,
+            borderTopStyle: style,
+            borderTopColor: color,
+            width: "100%",
+          }}
+        />
+      );
+    }
     default:
       return null;
   }
+}
+
+// 인라인 편집 가능한 Text 리프
+// - 더블 클릭 또는 F2 키로 편집 모드 진입
+// - Enter(shift 없이) / blur로 커밋, Escape으로 취소
+// - 포인터 이벤트는 stopPropagation으로 드래그 방해 방지
+function TextLeaf({
+  node,
+  editing,
+  setEditing,
+}: {
+  node: LayoutNode;
+  editing: boolean;
+  setEditing: (v: boolean) => void;
+}) {
+  const p = node.props as TextProps;
+  const updateProps = useLayoutStore((s) => s.updateProps);
+  const [draft, setDraft] = useState(p.text);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    // prop.text가 외부에서 변경되면 draft 동기화 (편집 중이 아닐 때만)
+    if (!editing) setDraft(p.text);
+  }, [p.text, editing]);
+
+  useEffect(() => {
+    if (editing && ref.current) {
+      ref.current.focus();
+      ref.current.select();
+    }
+  }, [editing]);
+
+  const size = {
+    sm: "text-xs",
+    md: "text-sm",
+    lg: "text-base",
+    xl: "text-lg",
+    "2xl": "text-2xl",
+  }[p.size ?? "md"];
+  const weight = {
+    normal: "font-normal",
+    medium: "font-medium",
+    bold: "font-bold",
+  }[p.weight ?? "normal"];
+
+  if (editing) {
+    const commit = () => {
+      updateProps(node.id, { text: draft });
+      setEditing(false);
+    };
+    return (
+      <textarea
+        ref={ref}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(p.text);
+            setEditing(false);
+          }
+          e.stopPropagation();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        rows={Math.max(1, draft.split("\n").length)}
+        className={cn(
+          size,
+          weight,
+          "w-full resize-none rounded border border-sky-500 bg-neutral-950 px-1.5 py-0.5 text-neutral-100 outline-none",
+        )}
+        style={{ color: p.color }}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
+      style={{ color: p.color }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        setEditing(true);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "F2") {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
+      tabIndex={0}
+      title="더블 클릭하여 편집"
+    >
+      {p.text || "Text"}
+    </span>
+  );
 }

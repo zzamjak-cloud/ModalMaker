@@ -56,8 +56,13 @@ export function Toolbar({ onNewClick }: Props) {
   const exported = renderExport(doc, format, includePrompt);
 
   async function save() {
-    await currentAdapter().saveDocument(doc);
-    flash(`저장됨: ${doc.title}`);
+    try {
+      await currentAdapter().saveDocument(doc);
+      flash(`저장됨: ${doc.title}`);
+    } catch (err) {
+      console.error("Save failed:", err);
+      flash(`저장 실패: ${readableError(err)}`);
+    }
   }
 
   async function saveAsPreset() {
@@ -67,8 +72,13 @@ export function Toolbar({ onNewClick }: Props) {
       title: `${doc.title} (프리셋)`,
       root: cloneWithNewIds(doc.root),
     };
-    await currentAdapter().saveUserPreset(copy);
-    flash("내 프리셋에 저장되었습니다");
+    try {
+      await currentAdapter().saveUserPreset(copy);
+      flash("내 프리셋에 저장되었습니다");
+    } catch (err) {
+      console.error("Save preset failed:", err);
+      flash(`프리셋 저장 실패: ${readableError(err)}`);
+    }
   }
 
   async function openLoadDialog() {
@@ -205,6 +215,16 @@ function renderExport(doc: LayoutDocument, format: ExportFormat, includePrompt: 
     case "mermaid":
       return toMermaid(doc);
   }
+}
+
+function readableError(err: unknown): string {
+  if (err instanceof Error) {
+    // Firestore permission-denied 에러 메시지를 짧게
+    if (err.message.includes("permission")) return "권한 오류 (rules/로그인 확인)";
+    if (err.message.includes("Unsupported field value")) return "지원하지 않는 필드 값";
+    return err.message.slice(0, 80);
+  }
+  return String(err).slice(0, 80);
 }
 
 function slug(s: string): string {

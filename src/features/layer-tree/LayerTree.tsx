@@ -131,6 +131,11 @@ function nodeLabel(node: LayoutNode): string {
       return `☑ ${(node.props as { label?: string }).label ?? "Checkbox"}`;
     case "progress":
       return `◐ Progress`;
+    case "split": {
+      const style = (node.props as { style?: string; orientation?: string }).style ?? "solid";
+      const orient = (node.props as { orientation?: string }).orientation === "vertical" ? " |" : " —";
+      return `╌ Split (${style})${orient}`;
+    }
   }
 }
 

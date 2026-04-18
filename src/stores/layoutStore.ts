@@ -43,6 +43,8 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
       return { label: "Option", checked: false };
     case "progress":
       return { value: 50, max: 100 };
+    case "split":
+      return { orientation: "horizontal", style: "solid", thickness: 1 };
   }
 }
 

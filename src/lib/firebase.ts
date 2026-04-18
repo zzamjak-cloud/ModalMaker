@@ -3,7 +3,7 @@
 // - 실제 사용 시 .env.local에 VITE_FIREBASE_* 값을 채울 것
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { initializeFirestore, type Firestore } from "firebase/firestore";
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -36,6 +36,8 @@ export function getFirebaseAuth(): Auth | null {
 export function getDb(): Firestore | null {
   const a = getFirebaseApp();
   if (!a) return null;
-  if (!dbInstance) dbInstance = getFirestore(a);
+  // ignoreUndefinedProperties: leaf 노드의 children/style 등 optional 필드가
+  // undefined 상태로 올 때 Firestore가 예외 던지지 않도록 함.
+  if (!dbInstance) dbInstance = initializeFirestore(a, { ignoreUndefinedProperties: true });
   return dbInstance;
 }
