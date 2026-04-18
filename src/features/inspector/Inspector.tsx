@@ -2,7 +2,7 @@
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
 import type {
   ButtonProps,
@@ -24,6 +24,7 @@ export function Inspector() {
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
 
   const node = useMemo(() => (selectedId ? findNode(doc.root, selectedId) : null), [doc, selectedId]);
+  const isSlot = !!(node && findPanelLayoutSlot(doc.root, node.id));
 
   if (!node) {
     return (
@@ -43,10 +44,10 @@ export function Inspector() {
           {node.kind}
         </div>
         <div className="flex gap-1">
-          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id}>
+          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id || isSlot}>
             복제
           </Btn>
-          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id} danger>
+          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id || isSlot} danger>
             삭제
           </Btn>
         </div>

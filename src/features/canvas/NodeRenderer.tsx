@@ -7,7 +7,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/cn";
 import { isContainerKind, type LayoutNode } from "@/types/layout";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
 import { DropZone } from "./DropZone";
 import { ButtonLeaf } from "./ButtonLeaf";
 import { applySizing } from "./applySizing";
@@ -59,10 +59,13 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
 
   const isSelected = selectedId === node.id;
 
+  const rootDoc = useLayoutStore((s) => s.document.root);
+  const isSlotContainer = !!findPanelLayoutSlot(rootDoc, node.id);
+
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
     data: { source: "canvas", nodeId: node.id },
-    disabled: depth === 0 || editingLeaf, // 루트 or 편집 중에는 드래그 금지
+    disabled: depth === 0 || editingLeaf || isSlotContainer, // 루트/편집 중/슬롯 container는 드래그 금지
   });
 
   const outline = cn(

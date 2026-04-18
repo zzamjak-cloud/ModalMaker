@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, findPanelLayoutSlot } from "@/stores/layoutStore";
 import type { LayoutNode } from "@/types/layout";
 
 export function LayerTree() {
@@ -31,6 +31,9 @@ function TreeNode({
   const selectedId = useLayoutStore((s) => s.selectedId);
   const select = useLayoutStore((s) => s.select);
   const removeNode = useLayoutStore((s) => s.removeNode);
+  const doc = useLayoutStore((s) => s.document);
+  const slotInfo = findPanelLayoutSlot(doc.root, node.id);
+  const isSlot = !!slotInfo;
 
   const isSelected = selectedId === node.id;
   const hasChildren = !!node.children?.length;
@@ -60,7 +63,7 @@ function TreeNode({
         </button>
         <span className="flex-1 truncate">{label}</span>
         <span className="opacity-0 transition group-hover:opacity-100 flex items-center gap-0.5">
-          {!isRoot && (
+          {!isRoot && !isSlot && (
             <>
               <IconButton
                 title="위로"
