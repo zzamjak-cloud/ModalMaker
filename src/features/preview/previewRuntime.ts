@@ -5,8 +5,10 @@ import type { Interaction, InteractionAction, InteractionEvent } from "@/types/l
 
 export interface PreviewContext {
   navigate: (pageId: string) => void;
-  // targetPageId 지정 시 해당 페이지로 이동, 미지정 시 히스토리 뒤로 가기 (프리뷰 종료 안 함)
   close: (targetPageId?: string) => void;
+  /** 탭 그룹 상태: groupId → 현재 활성 nodeId */
+  tabActiveMap: Record<string, string>;
+  setTabActive: (groupId: string, nodeId: string) => void;
 }
 
 export function runActions(

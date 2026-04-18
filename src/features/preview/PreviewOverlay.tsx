@@ -1,5 +1,5 @@
 // 프리뷰 풀스크린 오버레이 — 히스토리 스택 + 테마 선택 지원
-import { useState, useCallback, useEffect } from "react";
+import { Fragment, useState, useCallback, useEffect } from "react";
 import { X, ChevronLeft, RotateCcw, Palette } from "lucide-react";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { PreviewRenderer } from "./PreviewRenderer";
@@ -7,6 +7,23 @@ import { ThemeProvider, useTheme } from "./ThemeContext";
 import { useThemeStore } from "./themeStore";
 import { THEME_LABELS, type ThemeName, type ThemeTokens } from "./themes";
 import type { PreviewContext } from "./previewRuntime";
+import type { LayoutNode, ButtonProps, NodeDocument } from "@/types/layout";
+
+function initTabActiveMap(doc: NodeDocument): Record<string, string> {
+  const map: Record<string, string> = {};
+  function walk(node: LayoutNode) {
+    if (node.kind === "button") {
+      const p = node.props as ButtonProps;
+      if (p.tabGroupId && p.tabDefaultActive) {
+        map[p.tabGroupId] = node.id;
+      }
+    }
+    node.children?.forEach(walk);
+  }
+  const page = doc.pages.find((p) => p.id === doc.currentPageId);
+  if (page) walk(page.root);
+  return map;
+}
 
 const THEME_OPTIONS: ThemeName[] = ["os", "dark", "light", "warm", "ocean"];
 
@@ -70,6 +87,16 @@ function PreviewContent() {
   const [currentPageId, setCurrentPageId] = useState(initialPageId);
   const [history, setHistory] = useState<string[]>([]);
 
+  const [tabActiveMap, setTabActiveMapState] = useState<Record<string, string>>(
+    () => initTabActiveMap(document),
+  );
+
+  const setTabActive = useCallback(
+    (groupId: string, nodeId: string) =>
+      setTabActiveMapState((prev) => ({ ...prev, [groupId]: nodeId })),
+    [],
+  );
+
   const page = document.pages.find((p) => p.id === currentPageId) ?? document.pages[0];
 
   const navigate = useCallback(
@@ -92,6 +119,12 @@ function PreviewContent() {
       return h.slice(0, -1);
     });
   }, []);
+
+  // 히스토리 특정 인덱스 항목으로 직접 이동
+  const jumpToHistory = useCallback((idx: number) => {
+    setCurrentPageId(history[idx]);
+    setHistory(history.slice(0, idx));
+  }, [history]);
 
   // 인터렉션 close 액션: 프리뷰 종료 대신 뒤로 가기 또는 지정 페이지 이동
   const close = useCallback(
@@ -119,7 +152,7 @@ function PreviewContent() {
     return () => window.removeEventListener("keydown", onKey);
   }, [exitPreview]);
 
-  const ctx: PreviewContext = { navigate, close };
+  const ctx: PreviewContext = { navigate, close, tabActiveMap, setTabActive };
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950">
@@ -143,7 +176,12 @@ function PreviewContent() {
           <RotateCcw size={12} />
           처음
         </button>
-        <div className="mx-2 truncate text-sm text-neutral-200">{page?.title ?? "(빈 페이지)"}</div>
+        <Breadcrumbs
+          history={history}
+          currentPageId={currentPageId}
+          pages={document.pages}
+          onJump={jumpToHistory}
+        />
         <div className="flex-1" />
         <ThemePicker />
         <button
@@ -162,6 +200,45 @@ function PreviewContent() {
       >
         {page ? <PreviewRenderer node={page.root} ctx={ctx} depth={0} /> : null}
       </div>
+    </div>
+  );
+}
+
+// OS 탐색기 스타일 경로 네비게이션 — 히스토리 항목 클릭 시 해당 지점으로 바로 이동
+function Breadcrumbs({
+  history,
+  currentPageId,
+  pages,
+  onJump,
+}: {
+  history: string[];
+  currentPageId: string;
+  pages: { id: string; title: string }[];
+  onJump: (idx: number) => void;
+}) {
+  function getTitle(id: string) {
+    return pages.find((p) => p.id === id)?.title ?? "(빈 페이지)";
+  }
+  return (
+    <div className="mx-2 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-xs">
+      {history.map((id, idx) => (
+        <Fragment key={id + idx}>
+          <button
+            onClick={() => onJump(idx)}
+            className="max-w-[100px] shrink-0 truncate text-neutral-400 hover:text-neutral-100"
+            title={getTitle(id)}
+          >
+            {getTitle(id)}
+          </button>
+          <span className="shrink-0 select-none text-neutral-700">/</span>
+        </Fragment>
+      ))}
+      <span
+        className="max-w-[140px] truncate font-medium text-neutral-100"
+        title={getTitle(currentPageId)}
+      >
+        {getTitle(currentPageId)}
+      </span>
     </div>
   );
 }
