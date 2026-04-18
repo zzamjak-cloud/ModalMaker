@@ -94,9 +94,12 @@ export function PreviewRenderer({
     runActions(node.interactions ?? [], "release", ctx);
   };
 
-  const handlerProps = node.interactions?.length
-    ? { onClick, onMouseEnter, onMouseLeave, onMouseDown, onMouseUp }
-    : {};
+  // hover는 비주얼 피드백을 위해 항상 활성화, 클릭/프레스는 인터렉션 있을 때만
+  const handlerProps = {
+    onMouseEnter,
+    onMouseLeave,
+    ...(node.interactions?.length ? { onClick, onMouseDown, onMouseUp } : {}),
+  };
 
   const sizing = applySizing(node);
 
@@ -120,15 +123,19 @@ export function PreviewRenderer({
   if (node.kind === "container" || node.kind === "foldable") {
     const p = node.props as ContainerProps & FoldableProps;
     const open = node.kind !== "foldable" || p.open !== false;
-    const bg = depth === 0 ? t.surfaceBg : t.surfaceBg2;
+    const rgbStr = depth === 0 ? t.surfaceRGBStr : t.surfaceRGBStr2;
+    const bg =
+      p.backgroundOpacity !== undefined
+        ? `rgba(${rgbStr},${p.backgroundOpacity / 100})`
+        : depth === 0
+          ? t.surfaceBg
+          : t.surfaceBg2;
     return (
       <div
         style={{
           ...containerLayoutStyle(p),
           ...sizing,
           ...stateStyle,
-          backgroundColor: p.borderColor ? undefined : bg,
-          // borderColor prop이 명시된 경우 컨테이너 배경은 별도 래퍼로 분리하지 않음
           background: bg,
         }}
         {...handlerProps}
@@ -172,8 +179,16 @@ export function PreviewRenderer({
       }
       case "button": {
         const p = node.props as ButtonProps;
+        // 탭 그룹: 활성/비활성 상태에 따라 effective variant 결정
+        const isTabGroup = !!p.tabGroupId;
+        const isTabActive = isTabGroup
+          ? ctx.tabActiveMap[p.tabGroupId!] === node.id
+          : true;
+        const effectiveVariant = isTabGroup
+          ? (isTabActive ? (p.variant ?? "primary") : (p.tabInactiveVariant ?? "ghost"))
+          : (p.variant ?? "primary");
         const variantStyle: React.CSSProperties = (() => {
-          switch (p.variant ?? "primary") {
+          switch (effectiveVariant) {
             case "primary":
               return { backgroundColor: t.accentBg, color: t.accentText };
             case "secondary":
@@ -182,6 +197,8 @@ export function PreviewRenderer({
               return { backgroundColor: t.destructiveBg, color: t.destructiveText };
             case "ghost":
               return { backgroundColor: t.ghostBg, color: t.ghostText, border: `1px solid ${t.ghostBorder}` };
+            case "plain":
+              return { backgroundColor: "transparent", color: t.ghostText, border: "none" };
             default:
               return {};
           }
@@ -194,13 +211,36 @@ export function PreviewRenderer({
         const Icon = getLucideIcon(p.iconName);
         const pos = p.iconPosition ?? "left";
         const iconPx = { sm: 12, md: 14, lg: 16 }[p.size ?? "md"] ?? 14;
+        // fixed size가 있으면 버튼 요소 자체에 적용
+        const btnSizeStyle: React.CSSProperties = {
+          ...(sizing.width ? { width: sizing.width } : {}),
+          ...(sizing.height ? { height: sizing.height } : {}),
+        };
+        const btnJustify = {
+          left: "flex-start",
+          center: "center",
+          right: "flex-end",
+        }[p.contentAlign ?? "center"];
         return (
           <button
             type="button"
+            onClick={
+              isTabGroup
+                ? (e) => {
+                    e.stopPropagation();
+                    ctx.setTabActive(p.tabGroupId!, node.id);
+                    runActions(node.interactions ?? [], "click", ctx);
+                  }
+                : undefined
+            }
             style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
+              display: "inline-flex", alignItems: "center",
+              justifyContent: btnJustify, gap: 6,
               borderRadius: 6, fontWeight: 500, cursor: "pointer",
-              border: "none", ...variantStyle, ...sizeStyle,
+              border: "none", transition: "filter 0.12s",
+              filter: hover ? "brightness(1.15)" : undefined,
+              opacity: isTabGroup && !isTabActive ? 0.6 : undefined,
+              ...variantStyle, ...sizeStyle, ...btnSizeStyle,
             }}
           >
             {Icon && pos === "left" && <Icon size={iconPx} />}
