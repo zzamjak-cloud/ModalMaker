@@ -2,7 +2,7 @@
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
 import { IconPicker } from "./IconPicker";
 import type {
@@ -19,13 +19,16 @@ import type {
 } from "@/types/layout";
 
 export function Inspector() {
-  const doc = useLayoutStore((s) => s.document);
+  const root = useLayoutStore((s) => activeRoot(s));
   const selectedId = useLayoutStore((s) => s.selectedId);
   const updateProps = useLayoutStore((s) => s.updateProps);
   const removeNode = useLayoutStore((s) => s.removeNode);
   const duplicateNode = useLayoutStore((s) => s.duplicateNode);
 
-  const node = useMemo(() => (selectedId ? findNode(doc.root, selectedId) : null), [doc, selectedId]);
+  const node = useMemo(
+    () => (selectedId && root ? findNode(root, selectedId) : null),
+    [root, selectedId],
+  );
 
   if (!node) {
     return (
@@ -45,10 +48,10 @@ export function Inspector() {
           {node.kind}
         </div>
         <div className="flex gap-1">
-          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === doc.root.id}>
+          <Btn onClick={() => duplicateNode(node.id)} disabled={node.id === root?.id}>
             복제
           </Btn>
-          <Btn onClick={() => removeNode(node.id)} disabled={node.id === doc.root.id} danger>
+          <Btn onClick={() => removeNode(node.id)} disabled={node.id === root?.id} danger>
             삭제
           </Btn>
         </div>

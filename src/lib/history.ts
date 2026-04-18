@@ -1,6 +1,6 @@
 // 전역 단축키 (Undo/Redo, 삭제) 바인딩 훅
 import { useEffect } from "react";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 
 export function useGlobalShortcuts(): void {
   useEffect(() => {
@@ -27,8 +27,10 @@ export function useGlobalShortcuts(): void {
       }
 
       if ((e.key === "Delete" || e.key === "Backspace") && !isEditing) {
-        const { selectedId, removeNode, document: doc } = useLayoutStore.getState();
-        if (!selectedId || selectedId === doc.root.id) return;
+        const state = useLayoutStore.getState();
+        const root = activeRoot(state);
+        const { selectedId, removeNode } = state;
+        if (!selectedId || !root || selectedId === root.id) return;
         e.preventDefault();
         removeNode(selectedId);
       }

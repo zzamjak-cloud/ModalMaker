@@ -18,6 +18,7 @@ import {
   FoldableProps,
   IconProps,
   InputProps,
+  ModuleRefProps,
   ProgressProps,
   SplitProps,
   TextProps,
@@ -140,7 +141,7 @@ export function NodeRenderer({ node, depth = 0 }: { node: LayoutNode; depth?: nu
       className={cn(outline, "px-1 py-0.5")}
       style={applySizing(node)}
     >
-      {renderLeaf(node, editingLeaf, setEditingLeaf)}
+      {renderLeaf(node, editingLeaf, setEditingLeaf, depth)}
     </div>
   );
 }
@@ -149,6 +150,7 @@ function renderLeaf(
   node: LayoutNode,
   editing: boolean,
   setEditing: (v: boolean) => void,
+  depth: number,
 ): React.ReactNode {
   switch (node.kind) {
     case "text":
@@ -229,6 +231,19 @@ function renderLeaf(
         return <span className="text-xs text-neutral-500">?{p.name ?? ""}</span>;
       }
       return <Comp size={p.size ?? 20} color={p.color ?? "currentColor"} />;
+    }
+    case "module-ref": {
+      const p = node.props as ModuleRefProps;
+      const mod = useLayoutStore
+        .getState()
+        .document.modules.find((m) => m.id === p.moduleId);
+      if (!mod) {
+        return (
+          <span className="text-xs text-rose-400">[모듈 없음: {p.moduleId}]</span>
+        );
+      }
+      // 순환 감지는 Task 4에서 정식 구현. 여기선 단순히 root를 inline으로 렌더.
+      return <NodeRenderer node={mod.root} depth={depth + 1} />;
     }
     default:
       return null;

@@ -1,16 +1,25 @@
-// 레이아웃 트리 전역 스토어
+// NodeDocument(v2) 기반 전역 스토어
 // - Zustand + immer: 깊은 트리 불변 업데이트
 // - past/future 스냅샷으로 Undo/Redo 구현
-// - 모든 뮤테이션은 커밋 직전 현재 document를 past에 push
+// - "active edit target": editingModuleId가 있으면 해당 모듈 root, 아니면 currentPage.root
+//   기존 뮤테이션 시그니처는 그대로 유지하되 activeRoot를 대상으로 동작한다.
 import { create } from "zustand";
 import { produce } from "immer";
 import { newId } from "@/lib/id";
+import { migrateToV2 } from "@/lib/migrate";
 import {
   isContainerKind,
   type LayoutDocument,
   type LayoutNode,
+  type Module,
+  type ModuleRefProps,
+  type NodeDocument,
   type NodeKind,
   type NodeProps,
+  type Page,
+  type PageEdge,
+  type SizingProps,
+  type ViewportSettings,
 } from "@/types/layout";
 
 const HISTORY_LIMIT = 100;
@@ -52,15 +61,65 @@ export function defaultPropsFor(kind: NodeKind): NodeProps {
   }
 }
 
-export function createEmptyDocument(title = "Untitled"): LayoutDocument {
+// 빈 v2 NodeDocument 생성. 하나의 빈 Container 루트를 가진 Page 한 개.
+export function createEmptyNodeDocument(title = "Untitled"): NodeDocument {
   const now = Date.now();
+  const page = createEmptyPage("Page 1", 0);
   return {
     id: newId("doc"),
     title,
-    root: createNode("container", { props: { direction: "column", gap: 8, padding: 16, label: "Root" } }),
+    pages: [page],
+    modules: [],
+    edges: [],
+    currentPageId: page.id,
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 2,
   };
+}
+
+// 레거시 호환 래퍼 - 반환 타입은 NodeDocument (setDocument가 수용).
+export function createEmptyDocument(title = "Untitled"): NodeDocument {
+  return createEmptyNodeDocument(title);
+}
+
+function createEmptyPage(title: string, index: number): Page {
+  return {
+    id: newId("page"),
+    title,
+    root: createNode("container", {
+      props: { direction: "column", gap: 8, padding: 16, label: "Root" },
+    }),
+    position: { x: index * 360, y: 0 },
+  };
+}
+
+// 현재 페이지 조회 (currentPageId가 유효하지 않으면 첫 페이지 폴백).
+export function currentPage(doc: NodeDocument): Page | null {
+  if (!doc.pages.length) return null;
+  return doc.pages.find((p) => p.id === doc.currentPageId) ?? doc.pages[0];
+}
+
+// 활성 편집 대상 root. 모듈 편집 중이면 모듈 root, 아니면 현재 페이지 root.
+export function activeRoot(state: LayoutState): LayoutNode | null {
+  if (state.editingModuleId) {
+    return (
+      state.document.modules.find((m) => m.id === state.editingModuleId)?.root ?? null
+    );
+  }
+  return currentPage(state.document)?.root ?? null;
+}
+
+// Immer draft 환경에서 안전하게 activeRoot를 얻기 위한 헬퍼
+function activeRootInDraft(
+  draft: NodeDocument,
+  editingModuleId: string | null,
+): LayoutNode | null {
+  if (editingModuleId) {
+    return draft.modules.find((m) => m.id === editingModuleId)?.root ?? null;
+  }
+  const pg = draft.pages.find((p) => p.id === draft.currentPageId) ?? draft.pages[0];
+  return pg?.root ?? null;
 }
 
 // 트리 순회: id로 노드 찾기 (Immer draft 호환)
@@ -92,76 +151,188 @@ function removeFromParent(parent: LayoutNode, childId: string): LayoutNode | nul
   return removed;
 }
 
-interface LayoutState {
-  document: LayoutDocument;
+function isAncestor(node: LayoutNode, possibleDescendantId: string): boolean {
+  if (!node.children) return false;
+  for (const c of node.children) {
+    if (c.id === possibleDescendantId) return true;
+    if (isAncestor(c, possibleDescendantId)) return true;
+  }
+  return false;
+}
+
+// 서브트리를 재귀 복제하면서 모든 id를 새로 발급
+export function cloneWithNewIds(node: LayoutNode): LayoutNode {
+  return {
+    ...node,
+    id: newId(),
+    props: { ...node.props },
+    sizing: node.sizing ? { ...node.sizing } : undefined,
+    children: node.children?.map(cloneWithNewIds),
+  };
+}
+
+// 전체 문서를 새 id로 복제 (Save As). 페이지/모듈/엣지 id 재매핑과
+// module-ref.props.moduleId 동기화도 함께 처리.
+export function cloneDocumentWithNewIds(
+  doc: NodeDocument,
+  newTitle: string,
+): NodeDocument {
+  const pageIdMap = new Map<string, string>();
+  const modIdMap = new Map<string, string>();
+  doc.pages.forEach((p) => pageIdMap.set(p.id, newId("page")));
+  doc.modules.forEach((m) => modIdMap.set(m.id, newId("mod")));
+
+  // 서브트리를 cloneWithNewIds한 뒤 내부 module-ref의 moduleId를 신규 id로 치환
+  const cloneAndRemap = (node: LayoutNode): LayoutNode => {
+    const cloned = cloneWithNewIds(node);
+    const walk = (n: LayoutNode) => {
+      if (n.kind === "module-ref") {
+        const p = n.props as ModuleRefProps;
+        const next = modIdMap.get(p.moduleId);
+        if (next) (n.props as ModuleRefProps).moduleId = next;
+      }
+      n.children?.forEach(walk);
+    };
+    walk(cloned);
+    return cloned;
+  };
+
+  const now = Date.now();
+  const firstNewPageId = pageIdMap.get(doc.currentPageId) ?? [...pageIdMap.values()][0];
+  return {
+    id: newId("doc"),
+    title: newTitle,
+    pages: doc.pages.map((p) => ({
+      ...p,
+      id: pageIdMap.get(p.id) ?? newId("page"),
+      root: cloneAndRemap(p.root),
+      position: { ...p.position },
+      viewport: p.viewport ? { ...p.viewport } : undefined,
+    })),
+    modules: doc.modules.map((m) => ({
+      ...m,
+      id: modIdMap.get(m.id) ?? newId("mod"),
+      root: cloneAndRemap(m.root),
+    })),
+    edges: doc.edges.map((e) => ({
+      ...e,
+      id: newId("edge"),
+      source: pageIdMap.get(e.source) ?? e.source,
+      target: pageIdMap.get(e.target) ?? e.target,
+    })),
+    currentPageId: firstNewPageId ?? doc.currentPageId,
+    createdAt: now,
+    updatedAt: now,
+    ownerUid: doc.ownerUid,
+    schemaVersion: 2,
+  };
+}
+
+// 재귀적으로 특정 module-ref를 제거 (removeModule에서 사용)
+function pruneModuleRefs(node: LayoutNode, moduleId: string): void {
+  if (!node.children) return;
+  node.children = node.children.filter((c) => {
+    if (c.kind === "module-ref" && (c.props as ModuleRefProps).moduleId === moduleId) {
+      return false;
+    }
+    pruneModuleRefs(c, moduleId);
+    return true;
+  });
+}
+
+export type EditorMode = "canvas" | "node" | "preview";
+
+export interface LayoutState {
+  document: NodeDocument;
+  mode: EditorMode;
   selectedId: string | null;
-  past: LayoutDocument[];
-  future: LayoutDocument[];
+  selectedPageId: string | null;
+  editingModuleId: string | null;
+  past: NodeDocument[];
+  future: NodeDocument[];
 
-  // 문서 교체 (로드/리셋)
-  setDocument: (doc: LayoutDocument) => void;
+  // 기존 액션 (시그니처 유지)
+  setDocument: (doc: LayoutDocument | NodeDocument) => void;
   resetDocument: () => void;
-
-  // 선택
   select: (id: string | null) => void;
-
-  // 트리 뮤테이션
   addNode: (parentId: string, node: LayoutNode, index?: number) => void;
   addNewNode: (parentId: string, kind: NodeKind, index?: number) => LayoutNode;
   moveNode: (nodeId: string, targetParentId: string, index?: number) => void;
   updateProps: (id: string, patch: Partial<NodeProps>) => void;
-  updateSizing: (id: string, patch: Partial<import("@/types/layout").SizingProps>) => void;
   updateTitle: (title: string) => void;
-  updateViewport: (patch: Partial<import("@/types/layout").ViewportSettings>) => void;
+  updateViewport: (patch: Partial<ViewportSettings>) => void;
+  updateSizing: (id: string, patch: Partial<SizingProps>) => void;
   removeNode: (id: string) => void;
   duplicateNode: (id: string) => void;
-
-  // 히스토리
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+
+  // 신규 액션 (Phase A)
+  addPage: (title?: string) => Page;
+  removePage: (pageId: string) => void;
+  updatePage: (pageId: string, patch: Partial<Omit<Page, "id" | "root">>) => void;
+  setCurrentPage: (pageId: string) => void;
+  movePage: (pageId: string, x: number, y: number) => void;
+
+  registerModule: (sourceNodeId: string) => Module | null;
+  updateModule: (moduleId: string, patch: Partial<Omit<Module, "id" | "root">>) => void;
+  removeModule: (moduleId: string) => void;
+  enterModuleEdit: (moduleId: string) => void;
+  exitModuleEdit: () => void;
+
+  addEdge: (source: string, target: string, sourceHandle?: string) => PageEdge;
+  removeEdge: (edgeId: string) => void;
+
+  setMode: (mode: EditorMode) => void;
 }
 
-function snapshot(doc: LayoutDocument): LayoutDocument {
+function snapshot(doc: NodeDocument): NodeDocument {
   return JSON.parse(JSON.stringify(doc));
 }
 
 function commit(
   state: LayoutState,
-  mutate: (draft: LayoutDocument) => void,
+  mutate: (draft: NodeDocument) => void,
 ): Partial<LayoutState> {
   const prev = snapshot(state.document);
   const next = produce(state.document, (draft) => {
     mutate(draft);
     draft.updatedAt = Date.now();
   });
-  // 동일 참조면 no-op
   if (next === state.document) return {};
   const past = [...state.past, prev].slice(-HISTORY_LIMIT);
   return { document: next, past, future: [] };
 }
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
-  document: createEmptyDocument(),
+  document: createEmptyNodeDocument(),
+  mode: "canvas",
   selectedId: null,
+  selectedPageId: null,
+  editingModuleId: null,
   past: [],
   future: [],
 
   setDocument: (doc) =>
-    set((s) => ({
-      past: [...s.past, snapshot(s.document)].slice(-HISTORY_LIMIT),
-      document: doc,
+    set(() => ({
+      document: migrateToV2(doc),
+      past: [],
       future: [],
       selectedId: null,
+      selectedPageId: null,
+      editingModuleId: null,
     })),
 
   resetDocument: () =>
-    set((s) => ({
-      past: [...s.past, snapshot(s.document)].slice(-HISTORY_LIMIT),
-      document: createEmptyDocument(),
+    set(() => ({
+      document: createEmptyNodeDocument(),
+      past: [],
       future: [],
       selectedId: null,
+      selectedPageId: null,
+      editingModuleId: null,
     })),
 
   select: (id) => set({ selectedId: id }),
@@ -169,7 +340,9 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   addNode: (parentId, node, index) =>
     set((s) =>
       commit(s, (draft) => {
-        const parent = findNode(draft.root, parentId);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        const parent = findNode(root, parentId);
         if (!parent || !isContainerKind(parent.kind)) return;
         parent.children ??= [];
         const i = index ?? parent.children.length;
@@ -186,12 +359,15 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   moveNode: (nodeId, targetParentId, index) =>
     set((s) =>
       commit(s, (draft) => {
-        if (nodeId === draft.root.id) return; // 루트는 이동 불가
-        const sourceParent = findParent(draft.root, nodeId);
-        const target = findNode(draft.root, targetParentId);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        if (nodeId === root.id) return; // 루트는 이동 불가
+        const sourceParent = findParent(root, nodeId);
+        const target = findNode(root, targetParentId);
         if (!sourceParent || !target || !isContainerKind(target.kind)) return;
-        // 자기 자신의 자손으로 이동하는 것 방지
-        if (isAncestor(findNode(draft.root, nodeId)!, targetParentId)) return;
+        const srcNode = findNode(root, nodeId);
+        if (!srcNode) return;
+        if (isAncestor(srcNode, targetParentId)) return;
         const removed = removeFromParent(sourceParent, nodeId);
         if (!removed) return;
         target.children ??= [];
@@ -203,16 +379,20 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   updateProps: (id, patch) =>
     set((s) =>
       commit(s, (draft) => {
-        const node = findNode(draft.root, id);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        const node = findNode(root, id);
         if (!node) return;
-        node.props = { ...node.props, ...patch };
+        node.props = { ...node.props, ...patch } as NodeProps;
       }),
     ),
 
   updateSizing: (id, patch) =>
     set((s) =>
       commit(s, (draft) => {
-        const node = findNode(draft.root, id);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        const node = findNode(root, id);
         if (!node) return;
         node.sizing = { ...(node.sizing ?? {}), ...patch };
       }),
@@ -225,19 +405,25 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }),
     ),
 
+  // Phase A에서 viewport는 페이지 단위. 모듈 편집 중에는 no-op.
   updateViewport: (patch) =>
     set((s) =>
       commit(s, (draft) => {
-        const prev = draft.viewport ?? { preset: "free" };
-        draft.viewport = { ...prev, ...patch };
+        if (s.editingModuleId) return;
+        const page = draft.pages.find((p) => p.id === draft.currentPageId) ?? draft.pages[0];
+        if (!page) return;
+        const prev = page.viewport ?? { preset: "free" as const };
+        page.viewport = { ...prev, ...patch };
       }),
     ),
 
   removeNode: (id) =>
     set((s) =>
       commit(s, (draft) => {
-        if (id === draft.root.id) return;
-        const parent = findParent(draft.root, id);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        if (id === root.id) return;
+        const parent = findParent(root, id);
         if (!parent) return;
         removeFromParent(parent, id);
       }),
@@ -246,8 +432,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   duplicateNode: (id) =>
     set((s) =>
       commit(s, (draft) => {
-        if (id === draft.root.id) return;
-        const parent = findParent(draft.root, id);
+        const root = activeRootInDraft(draft, s.editingModuleId);
+        if (!root) return;
+        if (id === root.id) return;
+        const parent = findParent(root, id);
         if (!parent?.children) return;
         const idx = parent.children.findIndex((c) => c.id === id);
         if (idx < 0) return;
@@ -280,23 +468,188 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
 
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
+
+  // --- 신규 액션 ---
+
+  addPage: (title = "New Page") => {
+    const st = get();
+    const page = createEmptyPage(title, st.document.pages.length);
+    set((s) =>
+      commit(s, (draft) => {
+        draft.pages.push(page);
+        draft.currentPageId = page.id;
+      }),
+    );
+    // selectedId가 이전 페이지 노드를 가리키지 않도록 리셋
+    set({ selectedId: null });
+    return page;
+  },
+
+  removePage: (pageId) =>
+    set((s) => {
+      const doc = s.document;
+      const target = doc.pages.find((p) => p.id === pageId);
+      if (!target) return {};
+      // 히스토리 기록은 commit 안에서만. 여기선 새로 구성한 document를 set.
+      const nextPages = doc.pages.filter((p) => p.id !== pageId);
+      const prev = snapshot(doc);
+      let finalDoc: NodeDocument;
+      if (nextPages.length === 0) {
+        // 최소 1페이지 보장: 빈 페이지 생성
+        const blank = createEmptyPage("Page 1", 0);
+        finalDoc = produce(doc, (draft) => {
+          draft.pages = [blank];
+          draft.currentPageId = blank.id;
+          draft.edges = draft.edges.filter(
+            (e) => e.source !== pageId && e.target !== pageId,
+          );
+          draft.updatedAt = Date.now();
+        });
+      } else {
+        finalDoc = produce(doc, (draft) => {
+          draft.pages = draft.pages.filter((p) => p.id !== pageId);
+          if (draft.currentPageId === pageId) {
+            draft.currentPageId = draft.pages[0].id;
+          }
+          draft.edges = draft.edges.filter(
+            (e) => e.source !== pageId && e.target !== pageId,
+          );
+          draft.updatedAt = Date.now();
+        });
+      }
+      // 제거된 페이지 내부 노드가 선택돼있었다면 clear
+      const selectionBelongsToRemoved = s.selectedId
+        ? findNode(target.root, s.selectedId) !== null
+        : false;
+      return {
+        document: finalDoc,
+        past: [...s.past, prev].slice(-HISTORY_LIMIT),
+        future: [],
+        selectedId: selectionBelongsToRemoved ? null : s.selectedId,
+      };
+    }),
+
+  updatePage: (pageId, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const p = draft.pages.find((pg) => pg.id === pageId);
+        if (!p) return;
+        Object.assign(p, patch);
+      }),
+    ),
+
+  setCurrentPage: (pageId) =>
+    set((s) => {
+      if (!s.document.pages.some((p) => p.id === pageId)) return {};
+      return {
+        document: { ...s.document, currentPageId: pageId },
+        selectedId: null,
+      };
+    }),
+
+  movePage: (pageId, x, y) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const p = draft.pages.find((pg) => pg.id === pageId);
+        if (!p) return;
+        p.position = { x, y };
+      }),
+    ),
+
+  registerModule: (sourceNodeId) => {
+    const st = get();
+    const root = activeRoot(st);
+    if (!root) return null;
+    const src = findNode(root, sourceNodeId);
+    if (!src) return null;
+    // 조건: 컨테이너여야 하고, 루트/이미 module-ref는 금지
+    if (!isContainerKind(src.kind)) return null;
+    if (src.id === root.id) return null;
+    if (src.kind === "module-ref") return null;
+
+    const clonedRoot = cloneWithNewIds(src);
+    const fallbackLabel =
+      (src.props as { label?: string; title?: string }).label ??
+      (src.props as { label?: string; title?: string }).title ??
+      `Module ${st.document.modules.length + 1}`;
+    const mod: Module = {
+      id: newId("mod"),
+      name: fallbackLabel,
+      root: clonedRoot,
+    };
+
+    set((s) =>
+      commit(s, (draft) => {
+        draft.modules.push(mod);
+        const activeRootDraft = activeRootInDraft(draft, s.editingModuleId);
+        if (!activeRootDraft) return;
+        const node = findNode(activeRootDraft, sourceNodeId);
+        if (!node) return;
+        node.kind = "module-ref";
+        node.children = undefined;
+        node.props = { moduleId: mod.id, label: mod.name } as ModuleRefProps;
+      }),
+    );
+    return mod;
+  },
+
+  updateModule: (moduleId, patch) =>
+    set((s) =>
+      commit(s, (draft) => {
+        const m = draft.modules.find((mm) => mm.id === moduleId);
+        if (!m) return;
+        Object.assign(m, patch);
+      }),
+    ),
+
+  removeModule: (moduleId) =>
+    set((s) =>
+      commit(s, (draft) => {
+        draft.modules = draft.modules.filter((m) => m.id !== moduleId);
+        // 모든 페이지 + 남은 모듈 root 내부의 module-ref 중 해당 id를 가리키는 노드 제거
+        draft.pages.forEach((p) => pruneModuleRefs(p.root, moduleId));
+        draft.modules.forEach((m) => pruneModuleRefs(m.root, moduleId));
+      }),
+    ),
+
+  enterModuleEdit: (moduleId) =>
+    set((s) => {
+      const exists = s.document.modules.some((m) => m.id === moduleId);
+      if (!exists) return {};
+      return { editingModuleId: moduleId, selectedId: null };
+    }),
+
+  exitModuleEdit: () => set({ editingModuleId: null, selectedId: null }),
+
+  addEdge: (source, target, sourceHandle) => {
+    const st = get();
+    const existing = st.document.edges.find(
+      (e) =>
+        e.source === source &&
+        e.target === target &&
+        (e.sourceHandle ?? undefined) === (sourceHandle ?? undefined),
+    );
+    if (existing) return existing;
+    const edge: PageEdge = {
+      id: newId("edge"),
+      source,
+      target,
+      sourceHandle,
+    };
+    set((s) =>
+      commit(s, (draft) => {
+        draft.edges.push(edge);
+      }),
+    );
+    return edge;
+  },
+
+  removeEdge: (edgeId) =>
+    set((s) =>
+      commit(s, (draft) => {
+        draft.edges = draft.edges.filter((e) => e.id !== edgeId);
+      }),
+    ),
+
+  setMode: (mode) => set({ mode }),
 }));
-
-function isAncestor(node: LayoutNode, possibleDescendantId: string): boolean {
-  if (!node.children) return false;
-  for (const c of node.children) {
-    if (c.id === possibleDescendantId) return true;
-    if (isAncestor(c, possibleDescendantId)) return true;
-  }
-  return false;
-}
-
-export function cloneWithNewIds(node: LayoutNode): LayoutNode {
-  return {
-    ...node,
-    id: newId(),
-    props: { ...node.props },
-    sizing: node.sizing ? { ...node.sizing } : undefined,
-    children: node.children?.map(cloneWithNewIds),
-  };
-}

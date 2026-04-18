@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useLayoutStore } from "@/stores/layoutStore";
+import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import type { LayoutNode } from "@/types/layout";
 
 export function LayerTree() {
@@ -16,7 +16,8 @@ export function LayerTree() {
 }
 
 function TreeNodeRoot() {
-  const root = useLayoutStore((s) => s.document.root);
+  const root = useLayoutStore((s) => activeRoot(s));
+  if (!root) return null;
   return <TreeNode node={root} depth={0} />;
 }
 
@@ -105,13 +106,15 @@ function TreeNode({
 
   // 인덱스 기반 형제 순서 변경: moveNode를 활용하되 같은 부모 내에서는 idx ±1 위치로 이동
   function reorder(id: string, delta: 1 | -1) {
-    const { document: doc, moveNode } = useLayoutStore.getState();
-    const parent = findParent(doc.root, id);
+    const state = useLayoutStore.getState();
+    const root = activeRoot(state);
+    if (!root) return;
+    const parent = findParent(root, id);
     if (!parent?.children) return;
     const idx = parent.children.findIndex((c) => c.id === id);
     const nextIdx = idx + delta;
     if (nextIdx < 0 || nextIdx >= parent.children.length) return;
-    moveNode(id, parent.id, nextIdx);
+    state.moveNode(id, parent.id, nextIdx);
   }
 }
 

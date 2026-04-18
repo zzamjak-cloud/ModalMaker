@@ -11,10 +11,12 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
-import { newId } from "@/lib/id";
-import { cloneWithNewIds } from "@/stores/layoutStore";
-import type { LayoutDocument } from "@/types/layout";
+import { cloneDocumentWithNewIds } from "@/stores/layoutStore";
+import { migrateToV2 } from "@/lib/migrate";
+import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import type { PersistenceAdapter } from "./local";
+
+type AnyDoc = LayoutDocument | NodeDocument;
 
 function userDocs(uid: string) {
   const db = getDb();
@@ -33,28 +35,22 @@ export function createRemoteAdapter(uid: string): PersistenceAdapter {
     async listDocuments() {
       const q = query(userDocs(uid), orderBy("updatedAt", "desc"));
       const snap = await getDocs(q);
-      return snap.docs.map((d) => d.data() as LayoutDocument);
+      return snap.docs.map((d) => migrateToV2(d.data() as AnyDoc));
     },
     async saveDocument(doc) {
-      const payload: LayoutDocument = { ...doc, ownerUid: uid, updatedAt: Date.now() };
+      const payload: NodeDocument = { ...doc, ownerUid: uid, updatedAt: Date.now() };
       await setDoc(docRef(userDocs(uid), doc.id), payload);
     },
     async loadDocument(id) {
       const snap = await getDoc(docRef(userDocs(uid), id));
-      return snap.exists() ? (snap.data() as LayoutDocument) : null;
+      return snap.exists() ? migrateToV2(snap.data() as AnyDoc) : null;
     },
     async duplicateDocument(id) {
       const snap = await getDoc(docRef(userDocs(uid), id));
       if (!snap.exists()) return null;
-      const src = snap.data() as LayoutDocument;
-      const now = Date.now();
-      const copy: LayoutDocument = {
-        ...src,
-        id: newId("doc"),
-        title: `${src.title} (복제)`,
-        root: cloneWithNewIds(src.root),
-        createdAt: now,
-        updatedAt: now,
+      const src = migrateToV2(snap.data() as AnyDoc);
+      const copy: NodeDocument = {
+        ...cloneDocumentWithNewIds(src, `${src.title} (복제)`),
         ownerUid: uid,
       };
       await setDoc(docRef(userDocs(uid), copy.id), copy);

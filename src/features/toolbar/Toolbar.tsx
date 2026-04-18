@@ -29,8 +29,12 @@ import {
 import { currentAdapter } from "@/features/persistence";
 import { AuthButton } from "@/features/auth/AuthButton";
 import { saveTextFile } from "@/lib/tauri";
-import { cloneWithNewIds } from "@/stores/layoutStore";
-import type { LayoutDocument } from "@/types/layout";
+import {
+  cloneDocumentWithNewIds,
+  cloneWithNewIds,
+  currentPage,
+} from "@/stores/layoutStore";
+import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { ViewportSelector } from "./ViewportSelector";
@@ -52,7 +56,7 @@ export function Toolbar({ onNewClick }: Props) {
   const [includePrompt, setIncludePrompt] = useState(false);
   const [format, setFormat] = useState<ExportFormat>("markdown");
   const [status, setStatus] = useState<string | null>(null);
-  const [savedDocs, setSavedDocs] = useState<LayoutDocument[]>([]);
+  const [savedDocs, setSavedDocs] = useState<NodeDocument[]>([]);
   const [openLoad, setOpenLoad] = useState(false);
   const [openSaveAs, setOpenSaveAs] = useState(false);
 
@@ -69,15 +73,7 @@ export function Toolbar({ onNewClick }: Props) {
   }
 
   async function saveAs(newTitle: string) {
-    const now = Date.now();
-    const copy: LayoutDocument = {
-      ...doc,
-      id: newId("doc"),
-      title: newTitle,
-      root: cloneWithNewIds(doc.root),
-      createdAt: now,
-      updatedAt: now,
-    };
+    const copy = cloneDocumentWithNewIds(doc, newTitle);
     try {
       await currentAdapter().saveDocument(copy);
       setDocument(copy); // 이후 사용자가 사본을 계속 편집
@@ -91,11 +87,20 @@ export function Toolbar({ onNewClick }: Props) {
   }
 
   async function saveAsPreset() {
+    // 프리셋은 현재 페이지 단독 레거시 LayoutDocument 포맷으로 저장 (호환성 유지).
+    const page = currentPage(doc);
+    if (!page) {
+      flash("프리셋 저장 실패: 활성 페이지가 없습니다");
+      return;
+    }
+    const now = Date.now();
     const copy: LayoutDocument = {
-      ...doc,
       id: newId("doc"),
-      title: `${doc.title} (프리셋)`,
-      root: cloneWithNewIds(doc.root),
+      title: `${page.title} (프리셋)`,
+      root: cloneWithNewIds(page.root),
+      createdAt: now,
+      updatedAt: now,
+      viewport: page.viewport,
     };
     try {
       await currentAdapter().saveUserPreset(copy);
@@ -112,7 +117,7 @@ export function Toolbar({ onNewClick }: Props) {
     setOpenLoad(true);
   }
 
-  function load(d: LayoutDocument) {
+  function load(d: NodeDocument) {
     // id/원본 root id를 그대로 유지해야 이후 Save가 '원본 덮어쓰기'로 동작한다.
     setDocument(d);
     setOpenLoad(false);
@@ -241,14 +246,31 @@ export function Toolbar({ onNewClick }: Props) {
   );
 }
 
-function renderExport(doc: LayoutDocument, format: ExportFormat, includePrompt: boolean): string {
+// Export 함수들은 아직 v1 LayoutDocument 형태를 입력으로 받는다.
+// Phase A에서는 현재 페이지를 LayoutDocument로 축약해 전달 (모듈/엣지 미포함).
+function renderExport(doc: NodeDocument, format: ExportFormat, includePrompt: boolean): string {
+  const page = currentPage(doc);
+  const legacy: LayoutDocument = {
+    id: doc.id,
+    title: doc.title,
+    root: page?.root ?? {
+      id: "empty",
+      kind: "container",
+      props: { direction: "column", gap: 0, padding: 0, label: "Empty" },
+      children: [],
+    },
+    viewport: page?.viewport,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    ownerUid: doc.ownerUid,
+  };
   switch (format) {
     case "json":
-      return toJson(doc);
+      return toJson(legacy);
     case "markdown":
-      return toMarkdown(doc, { includePrompt });
+      return toMarkdown(legacy, { includePrompt });
     case "mermaid":
-      return toMermaid(doc);
+      return toMermaid(legacy);
   }
 }
 
@@ -308,9 +330,9 @@ function LoadDialog({
   onClose,
   onLoad,
 }: {
-  docs: LayoutDocument[];
+  docs: NodeDocument[];
   onClose: () => void;
-  onLoad: (d: LayoutDocument) => void;
+  onLoad: (d: NodeDocument) => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
