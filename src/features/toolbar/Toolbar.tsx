@@ -32,6 +32,7 @@ import { saveTextFile } from "@/lib/tauri";
 import { cloneWithNewIds } from "@/stores/layoutStore";
 import type { LayoutDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
+import { SaveAsDialog } from "./SaveAsDialog";
 
 interface Props {
   onNewClick: () => void;
@@ -52,6 +53,7 @@ export function Toolbar({ onNewClick }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [savedDocs, setSavedDocs] = useState<LayoutDocument[]>([]);
   const [openLoad, setOpenLoad] = useState(false);
+  const [openSaveAs, setOpenSaveAs] = useState(false);
 
   const exported = renderExport(doc, format, includePrompt);
 
@@ -62,6 +64,28 @@ export function Toolbar({ onNewClick }: Props) {
     } catch (err) {
       console.error("Save failed:", err);
       flash(`저장 실패: ${readableError(err)}`);
+    }
+  }
+
+  async function saveAs(newTitle: string) {
+    const now = Date.now();
+    const copy: LayoutDocument = {
+      ...doc,
+      id: newId("doc"),
+      title: newTitle,
+      root: cloneWithNewIds(doc.root),
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      await currentAdapter().saveDocument(copy);
+      setDocument(copy); // 이후 사용자가 사본을 계속 편집
+      flash(`새 파일로 저장됨: ${newTitle}`);
+    } catch (err) {
+      console.error("Save As failed:", err);
+      flash(`다른 이름으로 저장 실패: ${readableError(err)}`);
+    } finally {
+      setOpenSaveAs(false);
     }
   }
 
@@ -126,6 +150,10 @@ export function Toolbar({ onNewClick }: Props) {
         <ToolbarButton onClick={save} title="로컬에 저장 (IndexedDB)">
           <Save size={14} />
           <span>Save</span>
+        </ToolbarButton>
+        <ToolbarButton onClick={() => setOpenSaveAs(true)} title="다른 이름으로 저장">
+          <Save size={14} />
+          <span>Save As</span>
         </ToolbarButton>
         <ToolbarButton onClick={openLoadDialog} title="저장된 문서 불러오기">
           <FolderOpen size={14} />
@@ -197,6 +225,13 @@ export function Toolbar({ onNewClick }: Props) {
 
       {openLoad && (
         <LoadDialog docs={savedDocs} onClose={() => setOpenLoad(false)} onLoad={load} />
+      )}
+      {openSaveAs && (
+        <SaveAsDialog
+          initialTitle={`${doc.title} (사본)`}
+          onCancel={() => setOpenSaveAs(false)}
+          onConfirm={saveAs}
+        />
       )}
     </>
   );
