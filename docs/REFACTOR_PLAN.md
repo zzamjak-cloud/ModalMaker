@@ -1,7 +1,7 @@
 # ModalMaker 성능 최적화 & 리팩토링 계획
 
 > 최초 작성: 2026-04-19, `main` @ `fab7568`
-> 최종 갱신: 2026-04-19, `main` @ `aa4a21d` — Phase 1~5 대부분 완료
+> 최종 갱신: 2026-04-19, `main` @ `90bdf62` — Phase 1~10 완료 (잔여: 타입 강화·CanvasViewport 훅)
 > 목표: **노드 타입·인터렉션·프리셋 확장이 쉬워지도록 구조화**하고, 복잡도 증가가 성능 붕괴로 이어지지 않게 기반을 강화한다.
 
 ---
@@ -223,3 +223,23 @@ export const NodeHost = memo(NodeHostImpl, (prev, next) => {
 
 - 2026-04-19 초안 — Phase 1~5 목표 및 단계 설정.
 - 2026-04-19 갱신 — Phase 1~5 완료 표시, Phase 6~10 추가.
+- 2026-04-19 3차 — Phase 6~10 대부분 완료.
+
+## Phase 6~10 완료 요약 (2026-04-19 3차)
+
+| Phase | 내용 | 커밋 | 결과 |
+|---|---|---|---|
+| **6-1** Toolbar 분해 | ToolbarButton/LoadDialog/toolbarUtils 분리 | `565caa7` | 453→352 LOC (-22%) |
+| **6-2** documentSlice 분해 | node/page/module/edge 액션 모듈 분리 | `3623372` | 459→29 LOC (합성자) |
+| **6-3** CanvasViewport 상수 추출 | canvasViewportConsts.ts (훅 분해는 보류) | `bc37a7d` | 회귀 위험 낮은 범위 |
+| **6-5** PreviewOverlay 분해 | ViewportFrame + ThemePicker 분리 | `bc37a7d` | 337→172 LOC (-49%) |
+| **7-1** React.memo | NodeRenderer/PreviewRenderer custom comparator | `5a002e9` | Immer 참조 기반 부분 재렌더 |
+| **7-2** History coalesce | commitCoalesce + updateProps/updateTitle에 적용 | `5a002e9` | 연속 타이핑 undo 1개로 그룹핑 |
+| **9** 테스트 확장 | 6개 테스트 파일 신규 (lib/stores 커버) | `33bba3c` | 10→47 tests |
+| **10** 관측성 | `src/lib/logger.ts` 중앙 로거 + console 교체 | `90bdf62` | warn 이상 프로덕션 통과 |
+
+**잔여 과제 (별도 PR 권장)**
+- 6-3 CanvasViewport 훅 분해 (useFitTransform/useContainerSize/usePointerPanZoom) — 회귀 시나리오 체크리스트 선행 필요
+- 6-4 presetRegistry 카테고리 분리 — 이미 lazy chunk로 분리되어 번들 영향 미미, 우선순위 낮음
+- 8-1 NodeKind/NodeProps 레지스트리 기반 타입 유도 — 중난이도
+- 8-2 InteractionAction 레지스트리화 — 후속 인터렉션 확장 시 같이 진행
