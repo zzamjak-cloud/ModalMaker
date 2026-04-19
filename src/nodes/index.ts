@@ -17,3 +17,5 @@ import "./module-ref";
 // 레지스트리 API 재노출
 export * from "./registry";
 export * from "./types";
+export { NodeHost } from "./NodeHost";
+export type { NodeHostProps } from "./NodeHost";
