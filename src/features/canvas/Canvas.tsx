@@ -7,9 +7,10 @@ import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 import { NodeRenderer } from "./NodeRenderer";
 import { CanvasViewport } from "./CanvasViewport";
 
-function resolveSize(v: ViewportSettings): { width: number; height: number } | null {
+function resolveSize(v: ViewportSettings): { width: number; height: number | null } | null {
   if (v.preset === "free") return null;
   if (v.preset === "custom") return { width: v.width ?? 1280, height: v.height ?? 720 };
+  if (v.preset === "custom-w") return { width: v.width ?? 1280, height: null };
   const p = VIEWPORT_PRESETS[v.preset];
   return { width: p.width, height: p.height };
 }
@@ -85,7 +86,7 @@ export function Canvas() {
       >
         {moduleBadge}
         <CanvasViewport
-          key={state.document.id}
+          key={`${state.document.id}|free|${state.editingModuleId ?? ""}`}
           className="min-h-0 w-full flex-1"
           fitTrigger={fitTrigger}
         >
@@ -94,6 +95,8 @@ export function Canvas() {
       </div>
     );
   }
+
+  const heightFree = size.height === null;
 
   return (
     <div
@@ -105,21 +108,24 @@ export function Canvas() {
     >
       {moduleBadge}
       <CanvasViewport
-        key={state.document.id}
+        key={`${state.document.id}|fixed|${state.editingModuleId ?? ""}|${size.width}|${size.height ?? "free"}`}
         className="min-h-0 w-full flex-1"
         contentWidth={size.width}
-        contentHeight={size.height}
+        contentHeight={heightFree ? undefined : size.height}
         fitTrigger={fitTrigger}
       >
         <div
           className="relative rounded-md bg-neutral-900/50 ring-1 ring-neutral-800"
-          style={{ width: size.width, height: size.height }}
+          style={{ width: size.width, ...(heightFree ? {} : { height: size.height as number }) }}
         >
           <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
-            {size.width} × {size.height}
+            {heightFree ? `${size.width}px (높이 자유)` : `${size.width} × ${size.height}`}
           </div>
-          <div className="h-full w-full" style={{ padding: `${safe}%` }}>
-            <NodeRenderer node={root} depth={0} />
+          <div
+            className={heightFree ? "flex w-full flex-col" : "flex h-full w-full flex-col"}
+            style={{ padding: `${safe}%`, boxSizing: "border-box" }}
+          >
+            <NodeRenderer node={root} depth={0} parentIsFlexContainer parentDirection="column" />
           </div>
         </div>
       </CanvasViewport>

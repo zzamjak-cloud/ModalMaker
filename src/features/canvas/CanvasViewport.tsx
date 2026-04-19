@@ -37,11 +37,6 @@ function snapScale(s: number): number {
   return clamp(Math.round(s * 10) / 10, MIN_SCALE, MAX_SCALE);
 }
 
-/** 맞춤 전용: 화면에 꽉 맞게 연속 배율(10% 스냅 없음). ± 버튼·핀치는 snapScale 유지. */
-function fitScaleExact(s: number): number {
-  return clamp(s, MIN_SCALE, MAX_SCALE);
-}
-
 export function CanvasViewport({
   children,
   className,
@@ -151,7 +146,6 @@ export function CanvasViewport({
   const fit = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    // clientWidth는 스크롤바/레이아웃 타이밍에 0이 되기 쉬움 — getBoundingClientRect 병행
     const br = el.getBoundingClientRect();
     let cw = br.width;
     let ch = br.height;
@@ -174,11 +168,8 @@ export function CanvasViewport({
       return;
     }
     fitRetryCountRef.current = 0;
-    // 한 겹 여백만 두고 비율 그대로(스냅 없음)
-    const s = Math.min(cw / w, ch / h) * 0.98;
-    const scale = fitScaleExact(s);
-    // 레이아웃은 flex로 뷰포트 정중앙에 두고, pan은 사용자 패닝·포인터 줌 보정만 사용
-    setView({ scale, panX: 0, panY: 0 });
+    // 맞춤 = 100% 줌 + 캔버스 중앙 정렬 (flex center로 중앙, pan 0)
+    setView({ scale: 1, panX: 0, panY: 0 });
     if (revealArmedRef.current) {
       revealArmedRef.current = false;
       scheduleRevealAfterStableContainer(fitSessionGenRef.current);
@@ -205,7 +196,7 @@ export function CanvasViewport({
     return () => ro.disconnect();
   }, [hasExplicitSize]);
 
-  // fitTrigger·내용 크기(known) 변경 시 맞춤 — 표시는 컨테이너 박스가 안정된 뒤(scheduleRevealAfterStableContainer)
+  // fitTrigger 변경 시에만 맞춤 — fit 함수 참조(knownW/H 변화)가 re-fit을 유발하지 않도록 fitRef 사용
   useLayoutEffect(() => {
     revealGenRef.current += 1;
     fitSessionGenRef.current = revealGenRef.current;
@@ -213,15 +204,15 @@ export function CanvasViewport({
     revealCompleteRef.current = false;
     setContentVisible(false);
     fitRetryCountRef.current = 0;
-    fit();
+    fitRef.current();
     const id = requestAnimationFrame(() => {
-      fit();
+      fitRef.current();
     });
     return () => {
       cancelAnimationFrame(id);
       revealGenRef.current += 1;
     };
-  }, [fit, fitTrigger]);
+  }, [fitTrigger]);
 
   // fitTrigger가 바뀔 때마다 RO 재구독 + 즉시 맞춤 플래그 초기화. 첫 유효 contentRect에서 한 번 fit(창만 리사이즈는 디바운스 RO).
   useLayoutEffect(() => {

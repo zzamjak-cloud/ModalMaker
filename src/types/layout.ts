@@ -53,6 +53,7 @@ export interface TextProps {
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   weight?: "normal" | "medium" | "bold";
   color?: string;
+  align?: "left" | "center" | "right";
 }
 
 export interface ButtonProps {
@@ -75,6 +76,10 @@ export interface InputProps {
   type?: "text" | "email" | "password" | "number";
   label?: string;
   value?: string;
+  /** true이면 라벨과 입력 필드를 한 줄로 표시 */
+  inline?: boolean;
+  /** 인라인 시 라벨 너비 비율 (%, 기본 30) */
+  labelWidth?: number;
 }
 
 export interface CheckboxProps {
@@ -134,7 +139,7 @@ export type InteractionEvent =
 
 // 인터렉션 액션
 export type InteractionAction =
-  | { type: "navigate"; targetPageId: string }
+  | { type: "navigate"; targetPageId: string; replace?: boolean } // replace=true면 히스토리 없이 이동
   | { type: "close"; targetPageId?: string }
   | { type: "applyStyle"; stylePresetId: string };
 
@@ -155,6 +160,10 @@ export interface SizingProps {
   heightFixed?: boolean;
   width?: number;
   height?: number;
+  /** true면 부모 flex 가로 공간을 채움 (widthFixed 무시) */
+  widthAnchored?: boolean;
+  /** true면 부모 flex 세로 공간을 채움 (heightFixed 무시) */
+  heightAnchored?: boolean;
 }
 
 export interface LayoutNode {
@@ -193,6 +202,7 @@ export interface Page {
   root: LayoutNode;
   position: { x: number; y: number }; // Node View 2D 좌표
   viewport?: ViewportSettings;        // 페이지별 Canvas 해상도
+  isPopup?: boolean;                  // true이면 프리뷰에서 이전 페이지 위에 팝업으로 표시
 }
 
 // 공용 컴포넌트(헤더/사이드바 등). 원본만 수정하면 모든 module-ref에 반영.
@@ -226,8 +236,8 @@ export interface NodeDocument {
 }
 
 export interface ViewportSettings {
-  preset: "free" | "desktop" | "laptop" | "tablet" | "mobile" | "custom";
-  width?: number;   // preset="custom"일 때만 사용
+  preset: "free" | "desktop" | "laptop" | "tablet" | "mobile" | "custom" | "custom-w";
+  width?: number;   // preset="custom"/"custom-w"일 때 사용
   height?: number;  // preset="custom"일 때만 사용
   safeAreaPct?: number; // 0~20, 기본 0
 }

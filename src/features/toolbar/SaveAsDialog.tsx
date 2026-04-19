@@ -6,10 +6,12 @@ export function SaveAsDialog({
   initialTitle,
   onCancel,
   onConfirm,
+  label = "새 파일 제목",
 }: {
   initialTitle: string;
   onCancel: () => void;
   onConfirm: (title: string) => void;
+  label?: string;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const ref = useRef<HTMLInputElement>(null);
@@ -30,7 +32,7 @@ export function SaveAsDialog({
         </div>
         <div className="flex flex-col gap-3 p-4">
           <label className="flex flex-col gap-1 text-xs text-neutral-400">
-            새 파일 제목
+            {label}
             <input
               ref={ref}
               value={title}

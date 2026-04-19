@@ -4,7 +4,7 @@ import { getStylePreset } from "@/features/interactions/stylePresets";
 import type { Interaction, InteractionAction, InteractionEvent } from "@/types/layout";
 
 export interface PreviewContext {
-  navigate: (pageId: string) => void;
+  navigate: (pageId: string, replace?: boolean) => void;
   close: (targetPageId?: string) => void;
   /** 탭 그룹 상태: groupId → 현재 활성 nodeId */
   tabActiveMap: Record<string, string>;
@@ -25,7 +25,7 @@ export function runActions(
 export function runAction(action: InteractionAction, ctx: PreviewContext): void {
   switch (action.type) {
     case "navigate":
-      if (action.targetPageId) ctx.navigate(action.targetPageId);
+      if (action.targetPageId) ctx.navigate(action.targetPageId, action.replace);
       break;
     case "close":
       ctx.close(action.targetPageId);

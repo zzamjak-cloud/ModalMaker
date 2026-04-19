@@ -106,8 +106,8 @@ export default function App() {
         <Toolbar onNewClick={() => setGalleryOpen(true)} />
 
         <div className="flex flex-1 overflow-hidden">
-          {/* 좌측: 팔레트 + 수직 리사이저 + 계층 트리 (프리뷰 모드에서는 숨김) */}
-          {mode !== "preview" && (
+          {/* 좌측: 팔레트 + 수직 리사이저 + 계층 트리 (프리뷰/노드 뷰 모드에서는 숨김) */}
+          {mode !== "preview" && mode !== "node" && (
             <aside className="flex w-64 flex-col border-r border-neutral-800 bg-neutral-900">
               <div className="flex-1 overflow-y-auto">
                 <Palette />
@@ -150,8 +150,8 @@ export default function App() {
             )}
           </main>
 
-          {/* 우측: 인스펙터 (프리뷰 모드에서는 숨김) */}
-          {mode !== "preview" && (
+          {/* 우측: 인스펙터 (프리뷰/노드 뷰 모드에서는 숨김) */}
+          {mode !== "preview" && mode !== "node" && (
             <aside className="w-80 overflow-y-auto border-l border-neutral-800 bg-neutral-900">
               <Inspector />
             </aside>

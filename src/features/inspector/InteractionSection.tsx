@@ -128,30 +128,47 @@ function InteractionRow({
       </div>
 
       {actionType === "navigate" && (
-        <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
-          <span className="w-14 shrink-0">대상 페이지</span>
-          <select
-            value={(it.action as { targetPageId: string }).targetPageId}
-            onChange={(e) =>
-              onChange({
-                action: { type: "navigate", targetPageId: e.target.value },
-              })
-            }
-            className={cn(
-              "w-full rounded-md border px-1.5 py-1 text-xs focus:border-sky-500 focus:outline-none",
-              (it.action as { targetPageId: string }).targetPageId
-                ? "border-neutral-800 bg-neutral-950 text-neutral-100"
-                : "border-rose-500/50 bg-neutral-950 text-rose-200",
-            )}
-          >
-            <option value="">(선택하세요)</option>
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+            <span className="w-14 shrink-0">대상 페이지</span>
+            <select
+              value={(it.action as { targetPageId: string }).targetPageId}
+              onChange={(e) => {
+                const cur = it.action as { replace?: boolean };
+                onChange({
+                  action: { type: "navigate", targetPageId: e.target.value, replace: cur.replace },
+                });
+              }}
+              className={cn(
+                "w-full rounded-md border px-1.5 py-1 text-xs focus:border-sky-500 focus:outline-none",
+                (it.action as { targetPageId: string }).targetPageId
+                  ? "border-neutral-800 bg-neutral-950 text-neutral-100"
+                  : "border-rose-500/50 bg-neutral-950 text-rose-200",
+              )}
+            >
+              <option value="">(선택하세요)</option>
+              {pages.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-neutral-400">
+            <input
+              type="checkbox"
+              checked={(it.action as { replace?: boolean }).replace ?? false}
+              onChange={(e) => {
+                const cur = it.action as { targetPageId: string; replace?: boolean };
+                onChange({
+                  action: { type: "navigate", targetPageId: cur.targetPageId ?? "", replace: e.target.checked },
+                });
+              }}
+              className="h-3 w-3 cursor-pointer accent-sky-400"
+            />
+            <span>히스토리 없이 이동 (사이드바/탭 전환용)</span>
+          </label>
+        </>
       )}
 
       {actionType === "close" && (

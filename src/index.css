@@ -16,3 +16,25 @@ body,
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   font-variant-ligatures: none;
 }
+
+/* ReactFlow Controls 다크 테마 — 기본값이 흰 배경/어두운 아이콘이라 다크 테마에 묻혀 안 보이는 문제 해결 */
+.react-flow__controls-button {
+  background: #171717 !important; /* neutral-900 */
+  border-bottom: 1px solid #262626 !important; /* neutral-800 */
+  color: #e5e5e5 !important; /* neutral-200 */
+}
+.react-flow__controls-button:hover {
+  background: #262626 !important; /* neutral-800 */
+}
+.react-flow__controls-button svg {
+  fill: #e5e5e5 !important;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__minimap {
+  background: #171717 !important;
+}
+.react-flow__minimap-mask {
+  fill: rgba(23, 23, 23, 0.7) !important;
+}

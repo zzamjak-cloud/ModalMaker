@@ -177,6 +177,32 @@ export function cloneWithNewIds(node: LayoutNode): LayoutNode {
   };
 }
 
+// 트리 내 모든 module-ref를 모듈 내용으로 재귀 인라인. 순환 참조는 빈 컨테이너로 대체.
+// 프리셋 저장 시 링크 관계를 제거해 독립 사용 가능하도록 만들 때 사용.
+export function unlinkAllModuleRefs(
+  node: LayoutNode,
+  moduleMap: Map<string, LayoutNode>,
+  visited: Set<string> = new Set(),
+): LayoutNode {
+  if (node.kind === "module-ref") {
+    const p = node.props as ModuleRefProps;
+    if (!moduleMap.has(p.moduleId) || visited.has(p.moduleId)) {
+      return {
+        id: node.id,
+        kind: "container",
+        props: { direction: "column" as const, gap: 0, padding: 0, label: (p as ModuleRefProps & { label?: string }).label ?? "Unlinked" },
+        children: [],
+      };
+    }
+    const modRoot = moduleMap.get(p.moduleId)!;
+    const next = new Set(visited);
+    next.add(p.moduleId);
+    return unlinkAllModuleRefs(modRoot, moduleMap, next);
+  }
+  if (!node.children?.length) return node;
+  return { ...node, children: node.children.map((c) => unlinkAllModuleRefs(c, moduleMap, visited)) };
+}
+
 // 전체 문서를 새 id로 복제 (Save As). 페이지/모듈/엣지 id 재매핑과
 // module-ref.props.moduleId 동기화도 함께 처리.
 export function cloneDocumentWithNewIds(
@@ -292,12 +318,14 @@ export interface LayoutState {
 
   // 신규 액션 (Phase A)
   addPage: (title?: string, root?: LayoutNode) => Page;
+  duplicatePage: (pageId: string, x?: number, y?: number) => void;
   removePage: (pageId: string) => void;
   updatePage: (pageId: string, patch: Partial<Omit<Page, "id" | "root">>) => void;
   setCurrentPage: (pageId: string) => void;
   movePage: (pageId: string, x: number, y: number) => void;
 
   registerModule: (sourceNodeId: string) => Module | null;
+  unlinkModule: (nodeId: string) => void;
   updateModule: (moduleId: string, patch: Partial<Omit<Module, "id" | "root">>) => void;
   removeModule: (moduleId: string) => void;
   enterModuleEdit: (moduleId: string) => void;
@@ -608,6 +636,24 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     return page;
   },
 
+  duplicatePage: (pageId, x, y) => {
+    const st = get();
+    const src = st.document.pages.find((p) => p.id === pageId);
+    if (!src) return;
+    const newPage: Page = {
+      id: newId("page"),
+      title: `${src.title} 복사`,
+      root: cloneWithNewIds(src.root),
+      position: {
+        x: x ?? src.position.x + 340,
+        y: y ?? src.position.y + 40,
+      },
+      viewport: src.viewport,
+      isPopup: src.isPopup,
+    };
+    set((s) => commit(s, (draft) => { draft.pages.push(newPage); }));
+  },
+
   removePage: (pageId) =>
     set((s) => {
       const doc = s.document;
@@ -715,6 +761,30 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }),
     );
     return mod;
+  },
+
+  unlinkModule: (nodeId) => {
+    const st = get();
+    const root = activeRoot(st);
+    if (!root) return;
+    const node = findNode(root, nodeId);
+    if (!node || node.kind !== "module-ref") return;
+    const p = node.props as ModuleRefProps;
+    const mod = st.document.modules.find((m) => m.id === p.moduleId);
+    if (!mod) return;
+    const replacement = cloneWithNewIds(mod.root);
+
+    set((s) =>
+      commit(s, (draft) => {
+        const ar = activeRootInDraft(draft, s.editingModuleId);
+        if (!ar) return;
+        const parent = findParent(ar, nodeId);
+        if (!parent?.children) return;
+        const idx = parent.children.findIndex((c) => c.id === nodeId);
+        if (idx < 0) return;
+        parent.children[idx] = replacement;
+      }),
+    );
   },
 
   updateModule: (moduleId, patch) =>

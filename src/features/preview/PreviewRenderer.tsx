@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { getLucideIcon } from "@/features/canvas/lucideLookup";
 import { applySizing } from "@/features/canvas/applySizing";
+import { applyParentFit, type ParentFlexDirection } from "@/lib/layoutSizing";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useTheme } from "./ThemeContext";
 import {
@@ -56,15 +57,23 @@ export function PreviewRenderer({
   ctx,
   visitedModuleIds,
   depth = 0,
+  parentDirection = "column",
+  parentIsFlexContainer = false,
 }: {
   node: LayoutNode;
   ctx: PreviewContext;
   visitedModuleIds?: Set<string>;
   depth?: number;
+  parentDirection?: ParentFlexDirection;
+  parentIsFlexContainer?: boolean;
 }) {
   const t = useTheme();
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
+  // foldable 전용 토글 상태 (프리뷰에서만 동적, 다른 kind에선 무시)
+  const [localOpen, setLocalOpen] = useState(
+    node.kind === "foldable" ? (node.props as FoldableProps).open !== false : true,
+  );
   const disabled = hasDisabledBehavior(node.interactions);
 
   const stateStyle = useMemo(
@@ -102,6 +111,12 @@ export function PreviewRenderer({
   };
 
   const sizing = applySizing(node);
+  const parentFit = parentIsFlexContainer ? applyParentFit(node, parentDirection) : {};
+  // depth=0이고 부모가 flex일 때 뷰포트 박스를 강제로 채움 (사용자 sizing 설정 무관)
+  const isRoot = depth === 0 && parentIsFlexContainer;
+  const rootFill: React.CSSProperties = isRoot
+    ? { flex: 1, minHeight: 0, width: "100%", height: "100%" }
+    : {};
 
   // module-ref
   if (node.kind === "module-ref") {
@@ -113,8 +128,15 @@ export function PreviewRenderer({
     if (!mod) return <span style={{ fontSize: 12, color: "#f87171" }}>[모듈 없음]</span>;
     if (isCircular) return <span style={{ fontSize: 12, color: "#fbbf24" }}>↻ 순환</span>;
     return (
-      <div style={{ ...sizing, ...stateStyle }} {...handlerProps}>
-        <PreviewRenderer node={mod.root} ctx={ctx} visitedModuleIds={nextVisited} depth={depth} />
+      <div style={{ ...sizing, ...parentFit, ...rootFill, ...stateStyle, display: "flex", flexDirection: "column" }} {...handlerProps}>
+        <PreviewRenderer
+          node={mod.root}
+          ctx={ctx}
+          visitedModuleIds={nextVisited}
+          depth={depth + 1}
+          parentIsFlexContainer
+          parentDirection="column"
+        />
       </div>
     );
   }
@@ -122,7 +144,7 @@ export function PreviewRenderer({
   // container / foldable
   if (node.kind === "container" || node.kind === "foldable") {
     const p = node.props as ContainerProps & FoldableProps;
-    const open = node.kind !== "foldable" || p.open !== false;
+    const open = node.kind !== "foldable" || localOpen;
     const rgbStr = depth === 0 ? t.surfaceRGBStr : t.surfaceRGBStr2;
     const bg =
       p.backgroundOpacity !== undefined
@@ -130,36 +152,118 @@ export function PreviewRenderer({
         : depth === 0
           ? t.surfaceBg
           : t.surfaceBg2;
+    const rawDir = p.direction ?? "column";
+    const innerDir: ParentFlexDirection =
+      rawDir === "grid" ? "grid" : rawDir === "row" ? "row" : "column";
     return (
       <div
         style={{
           ...containerLayoutStyle(p),
           ...sizing,
+          ...parentFit,
           ...stateStyle,
           background: bg,
+          ...rootFill,
         }}
         {...handlerProps}
       >
         {node.kind === "foldable" && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            borderBottom: `1px solid ${t.borderColor}`,
-            padding: "6px 12px",
-            fontSize: 12, fontWeight: 500, color: t.textSecondary,
-          }}>
-            <span>{open ? "▾" : "▸"}</span>
+          <div
+            onClick={(e) => { e.stopPropagation(); setLocalOpen((v) => !v); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              borderBottom: `1px solid ${t.borderColor}`,
+              padding: "6px 12px",
+              fontSize: 13, fontWeight: 500, color: t.textSecondary,
+              cursor: "pointer", userSelect: "none",
+            }}
+          >
+            <span style={{ fontSize: 16, lineHeight: 1 }}>{open ? "▾" : "▸"}</span>
             <span>{p.title ?? "Section"}</span>
           </div>
         )}
-        {open && node.children?.map((c) => (
-          <PreviewRenderer
-            key={c.id}
-            node={c}
-            ctx={ctx}
-            visitedModuleIds={visitedModuleIds}
-            depth={depth + 1}
+        {open && (
+          node.kind === "foldable" ? (
+            <div style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: p.gap ?? 8 }}>
+              {node.children?.map((c) => (
+                <PreviewRenderer
+                  key={c.id}
+                  node={c}
+                  ctx={ctx}
+                  visitedModuleIds={visitedModuleIds}
+                  depth={depth + 1}
+                  parentDirection={innerDir}
+                  parentIsFlexContainer
+                />
+              ))}
+            </div>
+          ) : (
+            node.children?.map((c) => (
+              <PreviewRenderer
+                key={c.id}
+                node={c}
+                ctx={ctx}
+                visitedModuleIds={visitedModuleIds}
+                depth={depth + 1}
+                parentDirection={innerDir}
+                parentIsFlexContainer
+              />
+            ))
+          )
+        )}
+      </div>
+    );
+  }
+
+  // Input: wrapper 자체를 flex 컨테이너로 만들어 inline/stacked 모드와 고정 폭을 정확히 적용
+  if (node.kind === "input") {
+    const p = node.props as InputProps;
+    const inputBaseStyle: React.CSSProperties = {
+      borderRadius: 6,
+      border: `1px solid ${t.inputBorder}`,
+      backgroundColor: t.inputBg,
+      color: t.textPrimary,
+      padding: "6px 10px",
+      fontSize: 14,
+      outline: "none",
+      boxSizing: "border-box",
+      minWidth: 0,
+    };
+    if (p.inline) {
+      const lw = p.labelWidth ?? 30;
+      return (
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 8, ...sizing, ...parentFit, ...stateStyle }}
+          {...handlerProps}
+        >
+          {p.label && (
+            <label style={{ fontSize: 14, color: t.textSecondary, flexShrink: 0, width: `${lw}%` }}>
+              {p.label}
+            </label>
+          )}
+          <input
+            type={p.type ?? "text"}
+            placeholder={p.placeholder}
+            defaultValue={p.value}
+            style={{ ...inputBaseStyle, flex: 1 }}
           />
-        ))}
+        </div>
+      );
+    }
+    return (
+      <div
+        style={{ display: "flex", flexDirection: "column", gap: 4, ...sizing, ...parentFit, ...stateStyle }}
+        {...handlerProps}
+      >
+        {p.label && (
+          <label style={{ fontSize: 12, color: t.textSecondary }}>{p.label}</label>
+        )}
+        <input
+          type={p.type ?? "text"}
+          placeholder={p.placeholder}
+          defaultValue={p.value}
+          style={{ ...inputBaseStyle, width: "100%" }}
+        />
       </div>
     );
   }
@@ -172,7 +276,7 @@ export function PreviewRenderer({
         const fontSize = { sm: 12, md: 14, lg: 16, xl: 18, "2xl": 24 }[p.size ?? "md"];
         const fontWeight = { normal: 400, medium: 500, bold: 700 }[p.weight ?? "normal"];
         return (
-          <span style={{ fontSize, fontWeight, color: p.color ?? t.textPrimary }}>
+          <span style={{ fontSize, fontWeight, color: p.color ?? t.textPrimary, textAlign: p.align ?? "left", display: "block" }}>
             {p.text || "Text"}
           </span>
         );
@@ -249,29 +353,6 @@ export function PreviewRenderer({
           </button>
         );
       }
-      case "input": {
-        const p = node.props as InputProps;
-        return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {p.label && (
-              <label style={{ fontSize: 12, color: t.textSecondary }}>{p.label}</label>
-            )}
-            <input
-              type={p.type ?? "text"}
-              placeholder={p.placeholder}
-              defaultValue={p.value}
-              style={{
-                width: "100%", borderRadius: 6,
-                border: `1px solid ${t.inputBorder}`,
-                backgroundColor: t.inputBg,
-                color: t.textPrimary,
-                padding: "6px 10px", fontSize: 14,
-                outline: "none",
-              }}
-            />
-          </div>
-        );
-      }
       case "checkbox": {
         const p = node.props as CheckboxProps;
         return (
@@ -316,7 +397,7 @@ export function PreviewRenderer({
   })();
 
   return (
-    <div style={{ ...sizing, ...stateStyle }} {...handlerProps}>
+    <div style={{ ...sizing, ...parentFit, ...stateStyle }} {...handlerProps}>
       {leaf}
     </div>
   );

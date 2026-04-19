@@ -76,6 +76,7 @@ export function Inspector() {
             size: getMixed((n) => (n.props as ButtonProps).size) ?? (selectedNodes[0].props as ButtonProps).size,
             contentAlign: getMixed((n) => (n.props as ButtonProps).contentAlign) ?? (selectedNodes[0].props as ButtonProps).contentAlign,
             tabGroupId: getMixed((n) => (n.props as ButtonProps).tabGroupId),
+            tabDefaultActive: getMixed((n) => (n.props as ButtonProps).tabDefaultActive),
             tabInactiveVariant: getMixed((n) => (n.props as ButtonProps).tabInactiveVariant),
           } as ButtonProps,
         }
@@ -343,6 +344,17 @@ function KindFields({
               onChange={(v) => onChange({ weight: v })}
             />
           </Field>
+          <Field label="Align">
+            <SegmentedControl
+              value={p.align ?? "left"}
+              options={[
+                { value: "left", label: "←" },
+                { value: "center", label: "가운데" },
+                { value: "right", label: "→" },
+              ]}
+              onChange={(v) => onChange({ align: v })}
+            />
+          </Field>
           <Field label="Color">
             <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
@@ -426,9 +438,29 @@ function KindFields({
       const p = node.props as InputProps;
       return (
         <>
+          <Field label="Layout">
+            <SegmentedControl
+              value={p.inline ? "inline" : "stack"}
+              options={[
+                { value: "stack", label: "2줄" },
+                { value: "inline", label: "1줄" },
+              ]}
+              onChange={(v) => onChange({ inline: v === "inline" })}
+            />
+          </Field>
           <Field label="Label">
             <TextInput value={p.label ?? ""} onChange={(v) => onChange({ label: v })} />
           </Field>
+          {p.inline && (
+            <Field label="Label 비율 (%)">
+              <NumberInput
+                value={p.labelWidth ?? 30}
+                min={10}
+                max={70}
+                onChange={(v) => onChange({ labelWidth: v })}
+              />
+            </Field>
+          )}
           <Field label="Placeholder">
             <TextInput value={p.placeholder ?? ""} onChange={(v) => onChange({ placeholder: v })} />
           </Field>
@@ -544,6 +576,7 @@ function ModuleRefFields({ node }: { node: LayoutNode }) {
   const mod = useLayoutStore((s) => s.document.modules.find((m) => m.id === p.moduleId));
   const updateModule = useLayoutStore((s) => s.updateModule);
   const enterModuleEdit = useLayoutStore((s) => s.enterModuleEdit);
+  const unlinkModule = useLayoutStore((s) => s.unlinkModule);
 
   if (!mod) {
     return (
@@ -558,12 +591,21 @@ function ModuleRefFields({ node }: { node: LayoutNode }) {
         <TextInput value={mod.name} onChange={(v) => updateModule(mod.id, { name: v })} />
       </Field>
       <Field label="Action">
-        <button
-          onClick={() => enterModuleEdit(mod.id)}
-          className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1.5 text-xs text-sky-200 hover:bg-sky-500/20"
-        >
-          모듈 편집으로 이동
-        </button>
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => enterModuleEdit(mod.id)}
+            className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-1.5 text-xs text-sky-200 hover:bg-sky-500/20"
+          >
+            모듈 편집으로 이동
+          </button>
+          <button
+            onClick={() => unlinkModule(node.id)}
+            className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-200 hover:bg-amber-500/20"
+            title="모듈 링크를 해제하고 편집 가능한 일반 컴포넌트로 변환"
+          >
+            모듈 해제
+          </button>
+        </div>
       </Field>
     </>
   );

@@ -1,11 +1,10 @@
-// 전역 단축키 (Undo/Redo, 삭제) 바인딩 훅
+// 전역 단축키 (Undo/Redo, 삭제, 복제) 바인딩 훅
 import { useEffect } from "react";
 import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 
 export function useGlobalShortcuts(): void {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // 텍스트 입력 포커스 시 삭제 단축키 무시 (편집 방해 방지)
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName?.toLowerCase();
       const isEditing =
@@ -21,6 +20,15 @@ export function useGlobalShortcuts(): void {
         if ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y") {
           e.preventDefault();
           useLayoutStore.getState().redo();
+          return;
+        }
+        if (e.key.toLowerCase() === "d" && !isEditing) {
+          e.preventDefault();
+          const state = useLayoutStore.getState();
+          const root = activeRoot(state);
+          const { selectedId } = state;
+          if (!selectedId || !root || selectedId === root.id) return;
+          state.duplicateNode(selectedId);
           return;
         }
         return;

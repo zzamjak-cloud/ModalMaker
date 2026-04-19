@@ -69,14 +69,72 @@ export function mergeSizingPatch(
   return out;
 }
 
-/** 고정 축만 width/height·flex-shrink 적용 */
+/** 고정 축만 width/height·flex-shrink 적용. 앵커드 축은 고정 크기 무시. */
 export function applySizing(node: LayoutNode): CSSProperties {
   const { widthFixed, heightFixed, width, height } = normalizeSizing(node.sizing);
-  if (!widthFixed && !heightFixed) return {};
+  const wa = node.sizing?.widthAnchored;
+  const ha = node.sizing?.heightAnchored;
+  const effectiveWFixed = widthFixed && !wa;
+  const effectiveHFixed = heightFixed && !ha;
+  if (!effectiveWFixed && !effectiveHFixed) return {};
   const out: CSSProperties = { flexShrink: 0 };
-  if (widthFixed) out.width = width;
-  if (heightFixed) out.height = height;
+  if (effectiveWFixed) {
+    out.width = width;
+    // 부모 align-items:stretch가 width를 무시하지 못하도록 교차축 정렬 고정
+    out.alignSelf = "flex-start";
+  }
+  if (effectiveHFixed) out.height = height;
   return out;
+}
+
+/**
+ * 부모 flex/grid 안에서 앵커드 노드의 성장 스타일을 반환.
+ * 컨테이너의 outer div 또는 리프의 단일 div에 적용한다.
+ */
+export function applyParentFit(
+  node: LayoutNode,
+  parentDirection: ParentFlexDirection,
+): CSSProperties {
+  const wa = node.sizing?.widthAnchored;
+  const ha = node.sizing?.heightAnchored;
+  if (!wa && !ha) return {};
+
+  const out: CSSProperties = {};
+  if (wa) {
+    if (parentDirection === "row") {
+      out.flexGrow = 1;
+      out.flexShrink = 1;
+      out.minWidth = 0;
+    } else {
+      // column/grid: 교차축 stretch
+      out.alignSelf = "stretch";
+    }
+  }
+  if (ha) {
+    if (parentDirection === "column") {
+      out.flexGrow = ((out.flexGrow as number) || 0) + 1;
+      out.flexShrink = 1;
+      out.minHeight = 0;
+    } else {
+      // row/grid: 교차축 stretch
+      out.alignSelf = "stretch";
+    }
+  }
+  return out;
+}
+
+/**
+ * 컨테이너 inner div가 앵커드 outer div에 맞춰 채우도록 하는 스타일.
+ * width/height 100%로 outer div를 완전히 채운다.
+ */
+export function applyInnerFill(node: LayoutNode): CSSProperties {
+  const wa = node.sizing?.widthAnchored;
+  const ha = node.sizing?.heightAnchored;
+  if (!wa && !ha) return {};
+  return {
+    ...(wa ? { width: "100%" } : {}),
+    ...(ha ? { height: "100%", minHeight: 0 } : {}),
+  };
 }
 
 /** justify 값 → 유효한 CSS justify-content (around/between 등 매핑) */

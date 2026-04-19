@@ -3,7 +3,7 @@
 // 컨테이너(container/foldable)는 내부 DropZone을 열어 드롭 대상이 된다.
 // 자식이 있을 때는 "자식 사이" 및 앞/뒤에 gap DropZone을 삽입해 원하는 index에 배치 가능.
 // Text 노드는 더블 클릭으로 인라인 편집이 가능하며, 편집 중에는 드래그가 비활성화된다.
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/cn";
 import { isContainerKind, type LayoutNode } from "@/types/layout";
@@ -13,6 +13,8 @@ import { ButtonLeaf } from "./ButtonLeaf";
 import { ResizeHandles } from "./ResizeHandles";
 import { applySizing } from "./applySizing";
 import {
+  applyInnerFill,
+  applyParentFit,
   flexMainAxisMarginStyle,
   justifyContentCss,
   normalizeSizing,
@@ -80,9 +82,7 @@ export function NodeRenderer({
   const select = useLayoutStore((s) => s.select);
   const toggleSelectMulti = useLayoutStore((s) => s.toggleSelectMulti);
   const clearMultiSelect = useLayoutStore((s) => s.clearMultiSelect);
-
-  // 리프 인라인 편집 상태 (Text/Button 공유) - 활성 시 드래그 비활성
-  const [editingLeaf, setEditingLeaf] = useState(false);
+  const enterModuleEdit = useLayoutStore((s) => s.enterModuleEdit);
 
   const isSelected = selectedId === node.id;
   const isInMultiSelect = selectedIds.includes(node.id);
@@ -90,7 +90,7 @@ export function NodeRenderer({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `canvas-${node.id}`,
     data: { source: "canvas", nodeId: node.id },
-    disabled: depth === 0 || editingLeaf, // 루트/편집 중은 드래그 금지
+    disabled: depth === 0, // 루트는 드래그 금지
   });
 
   // ring은 box-shadow 기반이라 레이아웃에 영향 없음 — border 대신 ring 사용
@@ -134,12 +134,13 @@ export function NodeRenderer({
         ↻ 순환 참조: {mod.name}
       </span>
     ) : (
+      // 모듈 root에게 이 wrapper div가 flex 부모임을 알려 anchored sizing이 동작하도록 함
       <NodeRenderer
         node={mod.root}
         depth={depth + 1}
         visitedModuleIds={nextVisited}
-        parentDirection={parentDirection}
-        parentIsFlexContainer={false}
+        parentDirection="column"
+        parentIsFlexContainer
       />
     );
 
@@ -149,15 +150,24 @@ export function NodeRenderer({
         {...listeners}
         {...attributes}
         onClick={selectHandler}
+        onDoubleClick={(e) => { e.stopPropagation(); enterModuleEdit(p.moduleId); }}
         className={cn(outline)}
         style={{
           ...applySizing(node),
-          ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+          display: "flex",
+          flexDirection: "column",
+          ...(parentIsFlexContainer ? {
+            ...flexMainAxisMarginStyle(parentDirection, node.flexMainAxis),
+            ...applyParentFit(node, parentDirection),
+          } : {}),
           position: "relative",
         }}
       >
         <ResizeHandles nodeId={node.id} show={isSelected} />
-        {content}
+        {/* 모듈 내부 NodeRenderer의 클릭 이벤트가 module-ref 선택을 가로채지 못하도록 차단 */}
+        <div className="pointer-events-none" style={{ display: "contents" }}>
+          {content}
+        </div>
         <div className="pointer-events-none absolute -top-4 left-0 select-none text-[9px] uppercase tracking-wider text-neutral-500">
           {mod ? `⊚ ${mod.name}` : "⊚ ?"}
         </div>
@@ -178,16 +188,27 @@ export function NodeRenderer({
         ? { background: `rgba(82,82,82,${p.backgroundOpacity / 100})` }
         : {};
     const flexStyle = parentIsFlexContainer
-      ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis)
+      ? {
+          ...flexMainAxisMarginStyle(parentDirection, node.flexMainAxis),
+          ...applyParentFit(node, parentDirection),
+        }
       : {};
+    // depth=0이고 부모가 flex일 때 뷰포트 박스를 강제로 채움 (사용자 sizing 설정 무관)
+    const isRoot = depth === 0 && parentIsFlexContainer;
+    const rootFill: React.CSSProperties = isRoot ? { flex: 1, minHeight: 0, width: "100%" } : {};
+    const rootInnerFill: React.CSSProperties = isRoot ? { height: "100%", minHeight: 0 } : {};
     return (
       <div
         ref={setNodeRef}
         {...listeners}
         {...attributes}
         onClick={selectHandler}
-        className={cn(outline, depth === 0 ? "min-w-[320px] bg-neutral-900/80" : "bg-neutral-900/40")}
-        style={{ ...flexStyle, ...bgStyle }}
+        className={cn(
+          outline,
+          depth === 0 ? "bg-neutral-900/80" : "bg-neutral-900/40",
+          depth === 0 && !parentIsFlexContainer ? "min-w-[320px]" : "",
+        )}
+        style={{ ...flexStyle, ...bgStyle, ...rootFill }}
       >
         {isFoldable && (
           <div className="flex items-center gap-2 border-b border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs font-medium text-neutral-300">
@@ -198,7 +219,14 @@ export function NodeRenderer({
         {open && (
           <div
             className="relative min-h-0 min-w-0"
-            style={{ ...containerStyle(p), ...applySizing(node), position: "relative" }}
+            style={{
+              ...containerStyle(p),
+              ...applySizing(node),
+              ...applyInnerFill(node),
+              ...rootInnerFill,
+              position: "relative",
+              ...(isFoldable ? { paddingLeft: (p.padding ?? 12) + 16 } : {}),
+            }}
           >
             <ResizeHandles nodeId={node.id} show={isSelected} />
             {node.children?.length ? (
@@ -230,11 +258,6 @@ export function NodeRenderer({
             )}
           </div>
         )}
-        {depth === 0 && (
-          <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
-            Canvas
-          </div>
-        )}
       </div>
     );
   }
@@ -248,30 +271,47 @@ export function NodeRenderer({
       className={cn(outline)}
       style={{
         ...applySizing(node),
-        ...(parentIsFlexContainer ? flexMainAxisMarginStyle(parentDirection, node.flexMainAxis) : {}),
+        ...(parentIsFlexContainer ? {
+          ...flexMainAxisMarginStyle(parentDirection, node.flexMainAxis),
+          ...applyParentFit(node, parentDirection),
+        } : {}),
         position: "relative",
       }}
     >
       <ResizeHandles nodeId={node.id} show={isSelected} />
-      {renderLeaf(node, editingLeaf, setEditingLeaf)}
+      {renderLeaf(node)}
     </div>
   );
 }
 
-function renderLeaf(
-  node: LayoutNode,
-  editing: boolean,
-  setEditing: (v: boolean) => void,
-): React.ReactNode {
+function renderLeaf(node: LayoutNode): React.ReactNode {
   switch (node.kind) {
     case "text":
-      return <TextLeaf node={node} editing={editing} setEditing={setEditing} />;
+      return <TextLeaf node={node} />;
     case "button":
-      return <ButtonLeaf node={node} editing={editing} setEditing={setEditing} />;
+      return <ButtonLeaf node={node} />;
     case "input": {
       const p = node.props as InputProps;
+      if (p.inline) {
+        const lw = p.labelWidth ?? 30;
+        return (
+          <div className="flex w-full items-center gap-2">
+            {p.label && (
+              <label className="shrink-0 text-xs text-neutral-400" style={{ width: `${lw}%` }}>
+                {p.label}
+              </label>
+            )}
+            <input
+              type={p.type ?? "text"}
+              placeholder={p.placeholder}
+              readOnly
+              className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:outline-none"
+            />
+          </div>
+        );
+      }
       return (
-        <div className="flex flex-col gap-1">
+        <div className="flex w-full flex-col gap-1">
           {p.label && <label className="text-xs text-neutral-400">{p.label}</label>}
           <input
             type={p.type ?? "text"}
@@ -348,36 +388,8 @@ function renderLeaf(
   }
 }
 
-// 인라인 편집 가능한 Text 리프
-// - 더블 클릭 또는 F2 키로 편집 모드 진입
-// - Enter(shift 없이) / blur로 커밋, Escape으로 취소
-// - 포인터 이벤트는 stopPropagation으로 드래그 방해 방지
-function TextLeaf({
-  node,
-  editing,
-  setEditing,
-}: {
-  node: LayoutNode;
-  editing: boolean;
-  setEditing: (v: boolean) => void;
-}) {
+function TextLeaf({ node }: { node: LayoutNode }) {
   const p = node.props as TextProps;
-  const updateProps = useLayoutStore((s) => s.updateProps);
-  const [draft, setDraft] = useState(p.text);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    // prop.text가 외부에서 변경되면 draft 동기화 (편집 중이 아닐 때만)
-    if (!editing) setDraft(p.text);
-  }, [p.text, editing]);
-
-  useEffect(() => {
-    if (editing && ref.current) {
-      ref.current.focus();
-      ref.current.select();
-    }
-  }, [editing]);
-
   const size = {
     sm: "text-xs",
     md: "text-sm",
@@ -391,80 +403,29 @@ function TextLeaf({
     bold: "font-bold",
   }[p.weight ?? "normal"];
 
-  if (editing) {
-    const commit = () => {
-      updateProps(node.id, { text: draft });
-      setEditing(false);
-    };
-    return (
-      <textarea
-        ref={ref}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            commit();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            setDraft(p.text);
-            setEditing(false);
-          }
-          e.stopPropagation();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        rows={Math.max(1, draft.split("\n").length)}
-        className={cn(
-          size,
-          weight,
-          "w-full resize-none rounded border border-sky-500 bg-neutral-950 px-1.5 py-0.5 text-neutral-100 outline-none",
-        )}
-        style={{ color: p.color }}
-      />
-    );
-  }
-
   const { widthFixed, heightFixed, width, height } = normalizeSizing(node.sizing);
   const fixedFrame = widthFixed || heightFixed;
+  const textAlign = p.align ?? "left";
   if (fixedFrame) {
     return (
       <div
-        className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
+        className={cn(size, weight, "text-neutral-100")}
         style={{
           color: p.color,
+          textAlign,
           width: widthFixed ? width : undefined,
           height: heightFixed ? height : undefined,
           overflow: "hidden",
         }}
-        onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}
-        onKeyDown={(e) => { if (e.key === "F2") { e.preventDefault(); setEditing(true); } }}
-        tabIndex={0}
-        title="더블 클릭하여 편집"
       >
         {p.text || "Text"}
       </div>
     );
   }
+  // span은 inline 요소라 text-align이 동작하지 않음 → block div로 렌더
   return (
-    <span
-      className={cn(size, weight, "cursor-text text-neutral-100 select-text")}
-      style={{ color: p.color }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        setEditing(true);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "F2") {
-          e.preventDefault();
-          setEditing(true);
-        }
-      }}
-      tabIndex={0}
-      title="더블 클릭하여 편집"
-    >
+    <div className={cn(size, weight, "text-neutral-100", "w-full")} style={{ color: p.color, textAlign }}>
       {p.text || "Text"}
-    </span>
+    </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   cloneDocumentWithNewIds,
   cloneWithNewIds,
   currentPage,
+  unlinkAllModuleRefs,
 } from "@/stores/layoutStore";
 import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
@@ -54,6 +55,7 @@ export function Toolbar({ onNewClick }: Props) {
   const [savedDocs, setSavedDocs] = useState<NodeDocument[]>([]);
   const [openLoad, setOpenLoad] = useState(false);
   const [openSaveAs, setOpenSaveAs] = useState(false);
+  const [openSavePreset, setOpenSavePreset] = useState(false);
   const [openExport, setOpenExport] = useState(false);
 
   async function save() {
@@ -80,18 +82,26 @@ export function Toolbar({ onNewClick }: Props) {
     }
   }
 
-  async function saveAsPreset() {
-    // 프리셋은 현재 페이지 단독 레거시 LayoutDocument 포맷으로 저장 (호환성 유지).
+  function saveAsPreset() {
     const page = currentPage(doc);
     if (!page) {
       flash("프리셋 저장 실패: 활성 페이지가 없습니다");
       return;
     }
+    setOpenSavePreset(true);
+  }
+
+  async function doSavePreset(title: string) {
+    const page = currentPage(doc);
+    if (!page) return;
     const now = Date.now();
+    // 페이지 내 module-ref를 모두 실제 노드로 인라인 후 저장 (링크 해제)
+    const moduleMap = new Map(doc.modules.map((m) => [m.id, m.root]));
+    const unlinkedRoot = unlinkAllModuleRefs(page.root, moduleMap);
     const copy: LayoutDocument = {
       id: newId("doc"),
-      title: `${page.title} (프리셋)`,
-      root: cloneWithNewIds(page.root),
+      title,
+      root: cloneWithNewIds(unlinkedRoot),
       createdAt: now,
       updatedAt: now,
       viewport: page.viewport,
@@ -102,6 +112,8 @@ export function Toolbar({ onNewClick }: Props) {
     } catch (err) {
       console.error("Save preset failed:", err);
       flash(`프리셋 저장 실패: ${readableError(err)}`);
+    } finally {
+      setOpenSavePreset(false);
     }
   }
 
@@ -280,6 +292,14 @@ export function Toolbar({ onNewClick }: Props) {
           initialTitle={`${doc.title} (사본)`}
           onCancel={() => setOpenSaveAs(false)}
           onConfirm={saveAs}
+        />
+      )}
+      {openSavePreset && (
+        <SaveAsDialog
+          initialTitle={`${currentPage(doc)?.title ?? doc.title} (프리셋)`}
+          onCancel={() => setOpenSavePreset(false)}
+          onConfirm={doSavePreset}
+          label="프리셋 이름"
         />
       )}
       {openExport && (

@@ -1,5 +1,4 @@
-// 좌측 컴포넌트 팔레트
-// 각 항목은 useDraggable로 드래그 소스가 되고, onDragEnd에서 addNewNode로 생성됨.
+// 좌측 컴포넌트 팔레트 — 2컬럼 그리드, 컴팩트 아이템
 import { useDraggable } from "@dnd-kit/core";
 import {
   Box,
@@ -19,19 +18,18 @@ interface PaletteItem {
   kind: NodeKind;
   label: string;
   Icon: typeof Box;
-  hint?: string;
 }
 
 const ITEMS: PaletteItem[] = [
-  { kind: "container", label: "Container", Icon: Box, hint: "Row / Column / Grid" },
-  { kind: "foldable", label: "Foldable", Icon: ChevronsUpDown, hint: "접힘 섹션" },
-  { kind: "text", label: "Text", Icon: Type, hint: "더블 클릭으로 편집" },
+  { kind: "container", label: "Container", Icon: Box },
+  { kind: "foldable", label: "Foldable", Icon: ChevronsUpDown },
+  { kind: "text", label: "Text", Icon: Type },
   { kind: "button", label: "Button", Icon: MousePointerClick },
   { kind: "input", label: "Input", Icon: TextCursorInput },
   { kind: "checkbox", label: "Checkbox", Icon: CheckSquare },
-  { kind: "icon", label: "Icon", Icon: Sparkles, hint: "Lucide 아이콘" },
+  { kind: "icon", label: "Icon", Icon: Sparkles },
   { kind: "progress", label: "Progress", Icon: Loader },
-  { kind: "split", label: "Split", Icon: Minus, hint: "실선 / 대시 / 점선" },
+  { kind: "split", label: "Split", Icon: Minus },
 ];
 
 export function Palette() {
@@ -40,9 +38,11 @@ export function Palette() {
       <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
         Components
       </div>
-      {ITEMS.map((item) => (
-        <PaletteButton key={item.kind} item={item} />
-      ))}
+      <div className="grid grid-cols-2 gap-1">
+        {ITEMS.map((item) => (
+          <PaletteButton key={item.kind} item={item} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -59,16 +59,13 @@ function PaletteButton({ item }: { item: PaletteItem }) {
       {...listeners}
       {...attributes}
       className={cn(
-        "flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-left text-sm text-neutral-200 transition",
+        "flex items-center gap-1.5 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-left transition",
         "hover:border-sky-500/60 hover:bg-neutral-900 cursor-grab active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
-      <item.Icon size={16} className="text-neutral-400" />
-      <div className="flex-1">
-        <div className="text-sm">{item.label}</div>
-        {item.hint && <div className="text-[10px] text-neutral-500">{item.hint}</div>}
-      </div>
+      <item.Icon size={13} className="shrink-0 text-neutral-400" />
+      <span className="truncate text-xs text-neutral-200">{item.label}</span>
     </button>
   );
 }
