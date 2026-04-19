@@ -35,6 +35,7 @@ import { useCanvasViewportControlsStore } from "@/features/canvas/canvasViewport
 import { ToolbarButton } from "./ToolbarButton";
 import { LoadDialog } from "./LoadDialog";
 import { currentPageAsLayoutDoc, readableError } from "./toolbarUtils";
+import { logger } from "@/lib/logger";
 
 const SaveAsDialog = lazy(() =>
   import("./SaveAsDialog").then((m) => ({ default: m.SaveAsDialog })),
@@ -94,7 +95,7 @@ export function Toolbar({ onNewClick }: Props) {
       await currentAdapter().saveDocument(doc);
       flash(`저장됨: ${doc.title}`);
     } catch (err) {
-      console.error("Save failed:", err);
+      logger.error("persistence", "Save failed", err);
       flash(`저장 실패: ${readableError(err)}`);
     }
   }
@@ -106,7 +107,7 @@ export function Toolbar({ onNewClick }: Props) {
       setDocument(copy); // 이후 사용자가 사본을 계속 편집
       flash(`새 파일로 저장됨: ${newTitle}`);
     } catch (err) {
-      console.error("Save As failed:", err);
+      logger.error("persistence", "Save As failed", err);
       flash(`다른 이름으로 저장 실패: ${readableError(err)}`);
     } finally {
       setOpenSaveAs(false);
@@ -141,7 +142,7 @@ export function Toolbar({ onNewClick }: Props) {
       await currentAdapter().saveUserPreset(copy);
       flash("내 프리셋에 저장되었습니다");
     } catch (err) {
-      console.error("Save preset failed:", err);
+      logger.error("presets", "Save preset failed", err);
       flash(`프리셋 저장 실패: ${readableError(err)}`);
     } finally {
       setOpenSavePreset(false);

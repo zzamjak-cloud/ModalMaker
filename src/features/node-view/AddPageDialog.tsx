@@ -5,6 +5,7 @@ import { BUILTIN_PRESETS, type PresetCategory } from "@/features/presets/presetR
 import { cloneWithNewIds } from "@/stores/layoutStore";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { currentAdapter } from "@/features/persistence";
+import { logger } from "@/lib/logger";
 import type { LayoutDocument } from "@/types/layout";
 
 const CATEGORIES: PresetCategory[] = ["Confirmation", "Alert", "Info", "Auth", "Form", "Flow", "Utility", "Layout"];
@@ -23,7 +24,10 @@ export function AddPageDialog({ onClose }: Props) {
   const [userPresets, setUserPresets] = useState<LayoutDocument[]>([]);
 
   useEffect(() => {
-    currentAdapter().listUserPresets().then(setUserPresets).catch(console.error);
+    currentAdapter()
+      .listUserPresets()
+      .then(setUserPresets)
+      .catch((err) => logger.error("presets", "listUserPresets failed", err));
   }, []);
 
   function handleBlank() {
