@@ -47,12 +47,7 @@ export function Inspector() {
 
   if (!node) {
     return (
-      <div className="p-4 text-sm text-neutral-500">
-        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-          Inspector
-        </div>
-        캔버스에서 컴포넌트를 선택하세요.
-      </div>
+      <div className="p-4 text-sm text-neutral-500">캔버스에서 컴포넌트를 선택하세요.</div>
     );
   }
 

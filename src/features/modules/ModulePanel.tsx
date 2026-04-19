@@ -15,18 +15,17 @@ export function ModulePanel() {
 
   return (
     <div className="flex flex-col gap-2 p-3">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-        Modules
-      </div>
       {modules.length === 0 ? (
         <div className="rounded-md border border-dashed border-neutral-800 bg-neutral-950/40 p-3 text-[11px] leading-relaxed text-neutral-500">
           컨테이너를 선택하고 <strong>Inspector의 '모듈로 등록'</strong>을 눌러
           공용 모듈을 만드세요.
         </div>
       ) : (
-        modules.map((m) => (
-          <ModuleCard key={m.id} module={m} isEditing={m.id === editingModuleId} />
-        ))
+        <div className="grid grid-cols-2 gap-2">
+          {modules.map((m) => (
+            <ModuleCard key={m.id} module={m} isEditing={m.id === editingModuleId} />
+          ))}
+        </div>
       )}
     </div>
   );

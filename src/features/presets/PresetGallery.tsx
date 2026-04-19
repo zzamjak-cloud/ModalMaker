@@ -3,7 +3,7 @@
 // - 그리드에서 선택 시 layoutStore.setDocument로 캔버스에 로드 (ID 재발급)
 // - 빈 상태에서 시작하려면 "Blank Canvas" 선택
 import { useEffect, useMemo, useState } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   useLayoutStore,
@@ -22,10 +22,19 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
   const setDocument = useLayoutStore((s) => s.setDocument);
   const [tab, setTab] = useState<TabKey>("All");
   const [userPresets, setUserPresets] = useState<LayoutDocument[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<LayoutDocument | null>(null);
 
   useEffect(() => {
     currentAdapter().listUserPresets().then(setUserPresets);
   }, [tab]);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    await currentAdapter().deleteUserPreset(id);
+    setUserPresets((prev) => prev.filter((p) => p.id !== id));
+    setDeleteTarget(null);
+  }
 
   const visible = useMemo(() => {
     if (tab === "All") return BUILTIN_PRESETS;
@@ -107,7 +116,12 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
 
             {tab === "My Presets"
               ? userPresets.map((p) => (
-                  <UserPresetCard key={p.id} doc={p} onClick={() => loadUserPreset(p)} />
+                  <UserPresetCard
+                    key={p.id}
+                    doc={p}
+                    onClick={() => loadUserPreset(p)}
+                    onDelete={() => setDeleteTarget(p)}
+                  />
                 ))
               : visible.map((p) => <PresetCard key={p.id} entry={p} onClick={() => loadPreset(p)} />)}
 
@@ -119,6 +133,33 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
+          <div className="w-[min(400px,92vw)] rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl">
+            <div className="border-b border-neutral-800 px-4 py-3 text-sm font-semibold text-neutral-100">
+              프리셋 삭제
+            </div>
+            <div className="px-4 py-4 text-sm text-neutral-300">
+              <strong className="text-neutral-100">"{deleteTarget.title}"</strong>을 삭제하시겠습니까?
+              <div className="mt-1 text-xs text-neutral-500">되돌릴 수 없습니다.</div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-neutral-800 px-4 py-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-md border border-rose-700 bg-rose-600/20 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-600/30"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -167,19 +208,38 @@ function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => voi
   );
 }
 
-function UserPresetCard({ doc, onClick }: { doc: LayoutDocument; onClick: () => void }) {
+function UserPresetCard({
+  doc,
+  onClick,
+  onDelete,
+}: {
+  doc: LayoutDocument;
+  onClick: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <button
-      onClick={onClick}
-      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60"
-    >
-      <div className="flex flex-1 items-center justify-center text-4xl text-neutral-600">📋</div>
-      <div className="border-t border-neutral-800 px-3 py-2">
-        <div className="text-sm font-medium text-neutral-100">{doc.title}</div>
-        <div className="mt-0.5 text-xs text-neutral-500">
-          {new Date(doc.updatedAt).toLocaleString("ko-KR")}
+    <div className="group relative flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        className="absolute right-2 top-2 z-10 rounded-md border border-neutral-800 bg-neutral-950/80 p-1.5 text-neutral-400 opacity-0 transition hover:border-rose-700 hover:bg-rose-950/60 hover:text-rose-200 group-hover:opacity-100"
+        title="프리셋 삭제"
+      >
+        <Trash2 size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex flex-1 flex-col text-left"
+      >
+        <div className="flex flex-1 items-center justify-center text-4xl text-neutral-600">📋</div>
+        <div className="border-t border-neutral-800 px-3 py-2">
+          <div className="text-sm font-medium text-neutral-100">{doc.title}</div>
+          <div className="mt-0.5 text-xs text-neutral-500">
+            {new Date(doc.updatedAt).toLocaleString("ko-KR")}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }

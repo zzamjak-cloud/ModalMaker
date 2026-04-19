@@ -9,7 +9,6 @@ import type { LayoutNode } from "@/types/layout";
 export function LayerTree() {
   return (
     <div className="flex flex-col gap-1 p-3">
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Layers</div>
       <TreeNodeRoot />
     </div>
   );

@@ -181,7 +181,7 @@ export function cloneDocumentWithNewIds(
 
 export const useLayoutStore = create<LayoutState>((set, get) => ({
   document: createEmptyNodeDocument(),
-  mode: "canvas",
+  mode: "node",
   selectedId: null,
   selectedIds: [],
   selectedPageId: null,

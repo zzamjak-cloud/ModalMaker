@@ -116,8 +116,13 @@ export default function App() {
           {/* 좌측: 팔레트 + 수직 리사이저 + 계층 트리 (프리뷰/노드 뷰 모드에서는 숨김) */}
           {mode !== "preview" && mode !== "node" && (
             <aside className="flex w-64 flex-col border-r border-neutral-800 bg-neutral-900">
-              <div className="flex-1 overflow-y-auto">
-                <Palette />
+              <div className="flex flex-col overflow-hidden flex-1">
+                <div className="flex gap-1 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
+                  <TabButton active>Components</TabButton>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <Palette />
+                </div>
               </div>
               <VerticalResizer
                 onResize={(absY, containerBottom) => {
@@ -177,8 +182,13 @@ export default function App() {
 
           {/* 우측: 인스펙터 (프리뷰/노드 뷰 모드에서는 숨김) */}
           {mode !== "preview" && mode !== "node" && (
-            <aside className="w-80 overflow-y-auto border-l border-neutral-800 bg-neutral-900">
-              <Inspector />
+            <aside className="flex w-80 flex-col border-l border-neutral-800 bg-neutral-900">
+              <div className="flex gap-1 border-b border-neutral-800 bg-neutral-900/60 px-2 py-1">
+                <TabButton active>Inspector</TabButton>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <Inspector />
+              </div>
             </aside>
           )}
         </div>
@@ -258,14 +268,14 @@ function VerticalResizer({
   );
 }
 
-// 좌측 하단 Layers/Modules 탭 버튼
+// 공용 탭 버튼 (단일 탭 바·복수 탭 모두 동일한 스타일 사용)
 function TabButton({
   active,
   onClick,
   children,
 }: {
   active: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -276,6 +286,7 @@ function TabButton({
         active
           ? "bg-sky-500/20 text-sky-200"
           : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200",
+        !onClick && "cursor-default",
       )}
     >
       {children}
