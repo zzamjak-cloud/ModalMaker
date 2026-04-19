@@ -220,6 +220,22 @@ export function Toolbar({ onNewClick }: Props) {
     setOpenLoad(false);
   }
 
+  async function renameSavedDoc(id: string, newTitle: string) {
+    const target = savedDocs.find((d) => d.id === id);
+    if (!target) return;
+    const updated: NodeDocument = { ...target, title: newTitle, updatedAt: Date.now() };
+    try {
+      await currentAdapter().saveDocument(updated);
+      setSavedDocs((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      // 현재 편집 중 문서와 동일 id면 state도 동기화
+      if (doc.id === id) setDocument(updated);
+      flash(`이름 변경됨: ${newTitle}`);
+    } catch (err) {
+      logger.error("persistence", "Rename failed", err);
+      flash(`이름 변경 실패: ${readableError(err)}`);
+    }
+  }
+
   function flash(msg: string) {
     setStatus(msg);
     setTimeout(() => setStatus(null), 1800);
@@ -279,7 +295,12 @@ export function Toolbar({ onNewClick }: Props) {
       </div>
 
       {openLoad && (
-        <LoadDialog docs={savedDocs} onClose={() => setOpenLoad(false)} onLoad={load} />
+        <LoadDialog
+          docs={savedDocs}
+          onClose={() => setOpenLoad(false)}
+          onLoad={load}
+          onRename={renameSavedDoc}
+        />
       )}
       {openSaveAs && (
         <Suspense fallback={<ToolbarDialogFallback />}>
