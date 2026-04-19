@@ -1,9 +1,12 @@
 // LayoutDocument → Mermaid flowchart (graph TD)
 // AI가 구조/위계 파악에 용이
 import type { LayoutDocument, LayoutNode } from "@/types/layout";
+import { getDescriptor } from "@/nodes/registry";
 
 function safeLabel(node: LayoutNode): string {
   const base = (() => {
+    const desc = getDescriptor(node.kind);
+    if (desc?.exportMermaid) return desc.exportMermaid(node);
     switch (node.kind) {
       case "container":
         return (node.props as { label?: string }).label ?? "Container";

@@ -17,20 +17,14 @@ import {
   applyParentFit,
   flexMainAxisMarginStyle,
   justifyContentCss,
-  normalizeSizing,
   type ParentFlexDirection,
 } from "@/lib/layoutSizing";
-import { getLucideIcon } from "./lucideLookup";
+import { getDescriptor } from "@/nodes/registry";
 import {
-  CheckboxProps,
   ContainerProps,
   FoldableProps,
-  IconProps,
   InputProps,
   ModuleRefProps,
-  ProgressProps,
-  SplitProps,
-  TextProps,
 } from "@/types/layout";
 
 function containerStyle(p: ContainerProps): React.CSSProperties {
@@ -285,9 +279,13 @@ export function NodeRenderer({
 }
 
 function renderLeaf(node: LayoutNode): React.ReactNode {
+  // registry에 Leaf가 등록된 kind는 descriptor 경로 우선 사용 (점진 이관)
+  const desc = getDescriptor(node.kind);
+  if (desc?.Leaf) {
+    const Leaf = desc.Leaf;
+    return <Leaf node={node} mode="canvas" />;
+  }
   switch (node.kind) {
-    case "text":
-      return <TextLeaf node={node} />;
     case "button":
       return <ButtonLeaf node={node} />;
     case "input": {
@@ -322,110 +320,8 @@ function renderLeaf(node: LayoutNode): React.ReactNode {
         </div>
       );
     }
-    case "checkbox": {
-      const p = node.props as CheckboxProps;
-      return (
-        <label className="flex items-center gap-2 text-sm text-neutral-200">
-          <input type="checkbox" checked={p.checked ?? false} readOnly className="h-4 w-4 accent-sky-500" />
-          {p.label}
-        </label>
-      );
-    }
-    case "progress": {
-      const p = node.props as ProgressProps;
-      const pct = Math.max(0, Math.min(100, ((p.value ?? 0) / (p.max ?? 100)) * 100));
-      return (
-        <div className="w-full">
-          {p.label && <div className="mb-1 text-xs text-neutral-400">{p.label}</div>}
-          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-            <div className="h-full bg-sky-500 transition-all" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-      );
-    }
-    case "split": {
-      const p = node.props as SplitProps;
-      const orientation = p.orientation ?? "horizontal";
-      const style = p.style ?? "solid";
-      const thickness = p.thickness ?? 1;
-      const color = p.color ?? "#525252"; // neutral-600
-      if (orientation === "vertical") {
-        return (
-          <div
-            aria-label="split"
-            style={{
-              borderLeftWidth: thickness,
-              borderLeftStyle: style,
-              borderLeftColor: color,
-              minHeight: 24,
-              alignSelf: "stretch",
-            }}
-          />
-        );
-      }
-      return (
-        <div
-          aria-label="split"
-          style={{
-            borderTopWidth: thickness,
-            borderTopStyle: style,
-            borderTopColor: color,
-            width: "100%",
-          }}
-        />
-      );
-    }
-    case "icon": {
-      const p = node.props as IconProps;
-      const Comp = getLucideIcon(p.name);
-      if (!Comp) {
-        return <span className="text-xs text-neutral-500">?{p.name ?? ""}</span>;
-      }
-      return <Comp size={p.size ?? 20} color={p.color ?? "currentColor"} />;
-    }
     default:
       return null;
   }
 }
 
-function TextLeaf({ node }: { node: LayoutNode }) {
-  const p = node.props as TextProps;
-  const size = {
-    sm: "text-xs",
-    md: "text-sm",
-    lg: "text-base",
-    xl: "text-lg",
-    "2xl": "text-2xl",
-  }[p.size ?? "md"];
-  const weight = {
-    normal: "font-normal",
-    medium: "font-medium",
-    bold: "font-bold",
-  }[p.weight ?? "normal"];
-
-  const { widthFixed, heightFixed, width, height } = normalizeSizing(node.sizing);
-  const fixedFrame = widthFixed || heightFixed;
-  const textAlign = p.align ?? "left";
-  if (fixedFrame) {
-    return (
-      <div
-        className={cn(size, weight, "text-neutral-100")}
-        style={{
-          color: p.color,
-          textAlign,
-          width: widthFixed ? width : undefined,
-          height: heightFixed ? height : undefined,
-          overflow: "hidden",
-        }}
-      >
-        {p.text || "Text"}
-      </div>
-    );
-  }
-  // span은 inline 요소라 text-align이 동작하지 않음 → block div로 렌더
-  return (
-    <div className={cn(size, weight, "text-neutral-100", "w-full")} style={{ color: p.color, textAlign }}>
-      {p.text || "Text"}
-    </div>
-  );
-}

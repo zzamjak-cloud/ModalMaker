@@ -8,6 +8,7 @@ import { produce } from "immer";
 import { newId } from "@/lib/id";
 import { migrateToV2 } from "@/lib/migrate";
 import { mergeSizingPatch } from "@/lib/layoutSizing";
+import { getDescriptor } from "@/nodes/registry";
 import {
   isContainerKind,
   type Interaction,
@@ -41,6 +42,9 @@ export function createNode(kind: NodeKind, overrides: Partial<LayoutNode> = {}):
 }
 
 export function defaultPropsFor(kind: NodeKind): NodeProps {
+  // registry에 defaultProps가 등록된 kind는 descriptor 우선 (점진 이관)
+  const desc = getDescriptor(kind);
+  if (desc) return desc.defaultProps();
   switch (kind) {
     case "container":
       return { direction: "column", gap: 8, padding: 12, label: "Container" };
