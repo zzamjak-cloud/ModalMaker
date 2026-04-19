@@ -4,13 +4,26 @@
 import { createStore, get as idbGet, set as idbSet, del as idbDel, keys as idbKeys } from "idb-keyval";
 import { cloneDocumentWithNewIds } from "@/stores/layoutStore";
 import { migrateToV2 } from "@/lib/migrate";
+import { logger } from "@/lib/logger";
 import type { LayoutDocument, NodeDocument } from "@/types/layout";
 
-// idb-keyval의 createStore는 같은 DB 이름으로 두 번 호출하면 version 1로 먼저 만들어진
-// store만 존재해 이후 다른 store 접근 시 "object store not found" 에러를 낸다.
-// → DB 이름을 분리해 각자 독립 관리한다.
-const DOC_STORE = createStore("modalmaker-db", "documents");
-const PRESET_STORE = createStore("modalmaker-presets-db", "userPresets");
+// ⚠️ idb-keyval은 createStore를 같은 DB 이름으로 두 번 호출하면 version 1에 먼저 만들어진
+// store만 존재해 이후 다른 store 접근 시 "object store not found" 에러가 발생한다.
+// 또한 이전 빌드에서 DB가 version 2로 bump된 사용자는 version 1로 여는 현재 코드와 충돌.
+// → DB 이름을 v2로 명시적으로 이동. 기존 "modalmaker-db" 데이터는 방치되며 브라우저
+// DevTools의 Application → IndexedDB에서 수동 백업 가능.
+const DOC_STORE = createStore("modalmaker-v2-docs", "documents");
+const PRESET_STORE = createStore("modalmaker-v2-presets", "userPresets");
+
+/** IDB 호출 방어막 — 스토어/DB 손상 시 에러 대신 빈 결과 반환 */
+async function safe<T>(label: string, fallback: T, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    logger.error("persistence", `${label} failed`, err);
+    return fallback;
+  }
+}
 
 export interface PersistenceAdapter {
   listDocuments(): Promise<NodeDocument[]>;
@@ -48,34 +61,43 @@ async function listAllPresets(
 }
 
 export const localAdapter: PersistenceAdapter = {
-  async listDocuments() {
-    return listAllDocs(DOC_STORE);
-  },
-  async saveDocument(doc) {
-    await idbSet(doc.id, { ...doc, updatedAt: Date.now() }, DOC_STORE);
-  },
-  async loadDocument(id) {
-    const raw = (await idbGet<AnyDoc>(id, DOC_STORE)) ?? null;
-    return raw ? migrateToV2(raw) : null;
-  },
-  async duplicateDocument(id) {
-    const raw = await idbGet<AnyDoc>(id, DOC_STORE);
-    if (!raw) return null;
-    const src = migrateToV2(raw);
-    const copy = cloneDocumentWithNewIds(src, `${src.title} (복제)`);
-    await idbSet(copy.id, copy, DOC_STORE);
-    return copy;
-  },
-  async deleteDocument(id) {
-    await idbDel(id, DOC_STORE);
-  },
-  async listUserPresets() {
-    return listAllPresets(PRESET_STORE);
-  },
-  async saveUserPreset(doc) {
-    await idbSet(doc.id, { ...doc, updatedAt: Date.now() }, PRESET_STORE);
-  },
-  async deleteUserPreset(id) {
-    await idbDel(id, PRESET_STORE);
-  },
+  listDocuments: () => safe("listDocuments", [], () => listAllDocs(DOC_STORE)),
+
+  saveDocument: (doc) =>
+    safe("saveDocument", undefined, async () => {
+      await idbSet(doc.id, { ...doc, updatedAt: Date.now() }, DOC_STORE);
+    }),
+
+  loadDocument: (id) =>
+    safe("loadDocument", null, async () => {
+      const raw = (await idbGet<AnyDoc>(id, DOC_STORE)) ?? null;
+      return raw ? migrateToV2(raw) : null;
+    }),
+
+  duplicateDocument: (id) =>
+    safe("duplicateDocument", null, async () => {
+      const raw = await idbGet<AnyDoc>(id, DOC_STORE);
+      if (!raw) return null;
+      const src = migrateToV2(raw);
+      const copy = cloneDocumentWithNewIds(src, `${src.title} (복제)`);
+      await idbSet(copy.id, copy, DOC_STORE);
+      return copy;
+    }),
+
+  deleteDocument: (id) =>
+    safe("deleteDocument", undefined, async () => {
+      await idbDel(id, DOC_STORE);
+    }),
+
+  listUserPresets: () => safe("listUserPresets", [], () => listAllPresets(PRESET_STORE)),
+
+  saveUserPreset: (doc) =>
+    safe("saveUserPreset", undefined, async () => {
+      await idbSet(doc.id, { ...doc, updatedAt: Date.now() }, PRESET_STORE);
+    }),
+
+  deleteUserPreset: (id) =>
+    safe("deleteUserPreset", undefined, async () => {
+      await idbDel(id, PRESET_STORE);
+    }),
 };
