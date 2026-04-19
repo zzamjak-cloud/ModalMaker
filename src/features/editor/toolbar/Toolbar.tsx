@@ -117,6 +117,40 @@ export function Toolbar({ onNewClick }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, setMode]);
 
+  // 파일 메뉴 단축키 — 브라우저 기본 동작(페이지 저장·열기 등) 차단 + 내부 기능 호출
+  // ref로 최신 핸들러를 참조해 effect 재등록을 피한다.
+  const shortcutRef = useRef<{
+    save: () => void;
+    openSaveAs: () => void;
+    openLoad: () => void;
+    openExport: () => void;
+  }>({ save: () => {}, openSaveAs: () => {}, openLoad: () => {}, openExport: () => {} });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "s") {
+        e.preventDefault();
+        if (e.shiftKey) shortcutRef.current.openSaveAs();
+        else shortcutRef.current.save();
+        return;
+      }
+      if (key === "o" && !e.shiftKey) {
+        e.preventDefault();
+        shortcutRef.current.openLoad();
+        return;
+      }
+      if (key === "e" && !e.shiftKey) {
+        e.preventDefault();
+        shortcutRef.current.openExport();
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   async function save() {
     try {
       await currentAdapter().saveDocument(doc);
@@ -190,6 +224,14 @@ export function Toolbar({ onNewClick }: Props) {
     setStatus(msg);
     setTimeout(() => setStatus(null), 1800);
   }
+
+  // 매 렌더마다 최신 핸들러를 ref에 반영 (effect는 재등록 없음)
+  shortcutRef.current = {
+    save,
+    openSaveAs: () => setOpenSaveAs(true),
+    openLoad: openLoadDialog,
+    openExport: () => setOpenExport(true),
+  };
 
   return (
     <>
@@ -314,10 +356,10 @@ function FileMenu({
         <div className="absolute left-0 top-full z-40 mt-1 min-w-[220px] rounded-md border border-neutral-800 bg-neutral-950 py-1 shadow-xl">
           <MenuItem onClick={wrap(onNew)} icon={<Plus size={14} />}>New</MenuItem>
           <MenuItem onClick={wrap(onSave)} icon={<Save size={14} />} shortcut="⌘S">Save</MenuItem>
-          <MenuItem onClick={wrap(onSaveAs)} icon={<Save size={14} />}>Save As</MenuItem>
-          <MenuItem onClick={wrap(onLoad)} icon={<FolderOpen size={14} />}>Load</MenuItem>
+          <MenuItem onClick={wrap(onSaveAs)} icon={<Save size={14} />} shortcut="⌘⇧S">Save As</MenuItem>
+          <MenuItem onClick={wrap(onLoad)} icon={<FolderOpen size={14} />} shortcut="⌘O">Load</MenuItem>
           <MenuItem onClick={wrap(onSavePreset)} icon={<Bookmark size={14} />}>Save to Preset</MenuItem>
-          <MenuItem onClick={wrap(onExport)} icon={<Download size={14} />}>Export</MenuItem>
+          <MenuItem onClick={wrap(onExport)} icon={<Download size={14} />} shortcut="⌘E">Export</MenuItem>
           {firebaseEnabled && (
             <>
               <MenuDivider />
