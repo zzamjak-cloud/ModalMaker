@@ -32,6 +32,9 @@ import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
 import { ViewportSelector } from "./ViewportSelector";
 import { useCanvasViewportControlsStore } from "@/features/canvas/canvasViewportControlsStore";
+import { ToolbarButton } from "./ToolbarButton";
+import { LoadDialog } from "./LoadDialog";
+import { currentPageAsLayoutDoc, readableError } from "./toolbarUtils";
 
 const SaveAsDialog = lazy(() =>
   import("./SaveAsDialog").then((m) => ({ default: m.SaveAsDialog })),
@@ -347,107 +350,3 @@ export function Toolbar({ onNewClick }: Props) {
   );
 }
 
-// 현재 페이지를 v1 LayoutDocument 형태로 synthesize해 Export 모듈로 전달한다.
-// Phase A 기준으로 Export 함수들이 아직 v1 입력을 받기 때문이다.
-function currentPageAsLayoutDoc(doc: NodeDocument): LayoutDocument {
-  const page = currentPage(doc) ?? doc.pages[0];
-  return {
-    id: doc.id,
-    title: page?.title ?? doc.title,
-    root: page?.root ?? {
-      id: "empty",
-      kind: "container",
-      props: { direction: "column", gap: 0, padding: 0, label: "Empty" },
-      children: [],
-    },
-    viewport: page?.viewport,
-    createdAt: doc.createdAt,
-    updatedAt: doc.updatedAt,
-    ownerUid: doc.ownerUid,
-  };
-}
-
-function readableError(err: unknown): string {
-  if (err instanceof Error) {
-    // Firestore permission-denied 에러 메시지를 짧게
-    if (err.message.includes("permission")) return "권한 오류 (rules/로그인 확인)";
-    if (err.message.includes("Unsupported field value")) return "지원하지 않는 필드 값";
-    return err.message.slice(0, 80);
-  }
-  return String(err).slice(0, 80);
-}
-
-function ToolbarButton({
-  children,
-  onClick,
-  disabled,
-  active,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  active?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition",
-        disabled
-          ? "cursor-not-allowed border-neutral-900 text-neutral-600"
-          : active
-            ? "border-sky-500/40 bg-sky-500/10 text-sky-200"
-            : "border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:bg-neutral-800",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function LoadDialog({
-  docs,
-  onClose,
-  onLoad,
-}: {
-  docs: NodeDocument[];
-  onClose: () => void;
-  onLoad: (d: NodeDocument) => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[min(560px,92vw)] overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-          <div className="text-sm font-semibold">저장된 문서</div>
-          <button onClick={onClose} className="text-xs text-neutral-400 hover:text-neutral-200">
-            닫기
-          </button>
-        </div>
-        <div className="max-h-[60vh] overflow-y-auto">
-          {docs.length === 0 ? (
-            <div className="px-4 py-6 text-center text-sm text-neutral-500">
-              저장된 문서가 없습니다.
-            </div>
-          ) : (
-            docs.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => onLoad(d)}
-                className="block w-full border-b border-neutral-900 px-4 py-3 text-left text-sm hover:bg-neutral-900"
-              >
-                <div className="font-medium text-neutral-100">{d.title}</div>
-                <div className="text-xs text-neutral-500">
-                  {new Date(d.updatedAt).toLocaleString("ko-KR")}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
