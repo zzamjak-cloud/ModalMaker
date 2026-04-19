@@ -214,30 +214,23 @@ export function CanvasViewport({
     };
   }, [fitTrigger]);
 
-  // fitTrigger가 바뀔 때마다 RO 재구독 + 즉시 맞춤 플래그 초기화. 첫 유효 contentRect에서 한 번 fit(창만 리사이즈는 디바운스 RO).
+  // 컨테이너 단일 ResizeObserver: fitTrigger마다 재구독하며 (1) 첫 유효 rect에서 즉시 fit 한 번 (2) 이후 리사이즈는 디바운스 fit.
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     didImmediateFitRef.current = false;
-    const ro = new ResizeObserver((entries) => {
-      const cr = entries[0].contentRect;
-      if (cr.width <= 0 || cr.height <= 0) return;
-      if (knownWRef.current <= 0 || knownHRef.current <= 0) return;
-      if (didImmediateFitRef.current) return;
-      didImmediateFitRef.current = true;
-      fitRetryCountRef.current = 0;
-      fitRef.current();
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [fitTrigger]);
-
-  // 컨테이너 리사이즈 시 맞춤 — 연속 RO(로드·플렉스 안정화 중)마다 즉시 fit 하면 배율이 400%↔27%처럼 튐. 디바운스만 적용.
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const ro = new ResizeObserver(() => {
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr || cr.width <= 0 || cr.height <= 0) return;
+      if (knownWRef.current <= 0 || knownHRef.current <= 0) return;
+
+      if (!didImmediateFitRef.current) {
+        didImmediateFitRef.current = true;
+        fitRetryCountRef.current = 0;
+        fitRef.current();
+      }
+
       if (debounceTimer != null) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
@@ -250,7 +243,7 @@ export function CanvasViewport({
       ro.disconnect();
       if (debounceTimer != null) clearTimeout(debounceTimer);
     };
-  }, []);
+  }, [fitTrigger]);
 
   /** 뷰 중앙 기준 ±10% — transformOrigin center + flex 중앙 정렬이면 배율만 바꿔도 화면 중심이 고정됨 */
   const zoomStep = useCallback((deltaSteps: number) => {

@@ -6,7 +6,7 @@ import {
   SegmentedControl,
   Select,
   TextInput,
-} from "@/features/inspector/inspector-ui";
+} from "@/features/editor/inspector/inspector-ui";
 
 export function InputInspector({ props, onChange }: InspectorSectionProps<InputProps>) {
   const p = props;

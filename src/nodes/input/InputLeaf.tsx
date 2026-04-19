@@ -1,9 +1,9 @@
 // Input — 캔버스(읽기 전용 스켈레톤) + 프리뷰(테마 입력)
-import { memo, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import type { LeafRenderProps } from "../types";
 import type { InputProps } from "@/types/layout";
 
-function InputLeafImpl({ node, mode, theme }: LeafRenderProps) {
+export function InputLeaf({ node, mode, theme }: LeafRenderProps) {
   const p = node.props as InputProps;
 
   if (mode === "canvas") {
@@ -96,5 +96,3 @@ function InputLeafImpl({ node, mode, theme }: LeafRenderProps) {
     </div>
   );
 }
-
-export const InputLeaf = memo(InputLeafImpl, (a, b) => a.node === b.node && a.mode === b.mode && a.theme === b.theme);

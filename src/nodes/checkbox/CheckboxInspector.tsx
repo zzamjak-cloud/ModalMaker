@@ -1,6 +1,6 @@
 import type { InspectorSectionProps } from "../types";
 import type { CheckboxProps } from "@/types/layout";
-import { Field, TextInput, Toggle } from "@/features/inspector/inspector-ui";
+import { Field, TextInput, Toggle } from "@/features/editor/inspector/inspector-ui";
 
 export function CheckboxInspector({ props, onChange }: InspectorSectionProps<CheckboxProps>) {
   const p = props;

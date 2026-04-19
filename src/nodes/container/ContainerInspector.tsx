@@ -7,8 +7,8 @@ import {
   SegmentedControl,
   Select,
   TextInput,
-} from "@/features/inspector/inspector-ui";
-import { ColorPicker } from "@/features/inspector/ColorPicker";
+} from "@/features/editor/inspector/inspector-ui";
+import { ColorPicker } from "@/features/editor/inspector/ColorPicker";
 
 export function ContainerInspector({
   props,

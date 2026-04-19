@@ -2,7 +2,7 @@
 import { useLayoutStore } from "@/stores/layoutStore";
 import type { InspectorSectionProps } from "../types";
 import type { ModuleRefProps } from "@/types/layout";
-import { Field, TextInput } from "@/features/inspector/inspector-ui";
+import { Field, TextInput } from "@/features/editor/inspector/inspector-ui";
 
 export function ModuleRefInspector({ node, props }: InspectorSectionProps<ModuleRefProps>) {
   const p = props;

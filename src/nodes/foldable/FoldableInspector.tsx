@@ -1,6 +1,6 @@
 import type { InspectorSectionProps } from "../types";
 import type { FoldableProps } from "@/types/layout";
-import { Field, TextInput, Toggle } from "@/features/inspector/inspector-ui";
+import { Field, TextInput, Toggle } from "@/features/editor/inspector/inspector-ui";
 
 export function FoldableInspector({ props, onChange }: InspectorSectionProps<FoldableProps>) {
   const p = props;

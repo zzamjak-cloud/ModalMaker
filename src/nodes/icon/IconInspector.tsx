@@ -1,8 +1,8 @@
 import type { InspectorSectionProps } from "../types";
 import type { IconProps } from "@/types/layout";
-import { Field, NumberInput } from "@/features/inspector/inspector-ui";
-import { IconPicker } from "@/features/inspector/IconPicker";
-import { ColorPicker } from "@/features/inspector/ColorPicker";
+import { Field, NumberInput } from "@/features/editor/inspector/inspector-ui";
+import { IconPicker } from "@/features/editor/inspector/IconPicker";
+import { ColorPicker } from "@/features/editor/inspector/ColorPicker";
 
 export function IconInspector({ props, onChange }: InspectorSectionProps<IconProps>) {
   const p = props;

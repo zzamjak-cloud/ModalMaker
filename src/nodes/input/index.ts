@@ -1,8 +1,16 @@
+import { memo } from "react";
 import { TextCursorInput } from "lucide-react";
 import type { InputProps } from "@/types/layout";
 import { register } from "../registry";
 import { InputInspector } from "./InputInspector";
-import { InputLeaf } from "./InputLeaf";
+import { InputLeaf as InputLeafBase } from "./InputLeaf";
+import type { LeafRenderProps } from "../types";
+
+const InputLeaf = memo(
+  InputLeafBase,
+  (a: LeafRenderProps, b: LeafRenderProps) =>
+    a.node === b.node && a.mode === b.mode && a.theme === b.theme,
+);
 
 register<InputProps>({
   kind: "input",

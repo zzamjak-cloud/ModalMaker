@@ -6,8 +6,8 @@ import {
   Select,
   TextInput,
   Toggle,
-} from "@/features/inspector/inspector-ui";
-import { IconPicker } from "@/features/inspector/IconPicker";
+} from "@/features/editor/inspector/inspector-ui";
+import { IconPicker } from "@/features/editor/inspector/IconPicker";
 
 export function ButtonInspector({ props, onChange }: InspectorSectionProps<ButtonProps>) {
   const p = props;

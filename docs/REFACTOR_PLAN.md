@@ -11,7 +11,7 @@
 ### 코드 집중 영역 (LOC 상위)
 | 파일 | LOC | 문제 |
 |---|---|---|
-| `features/inspector/Inspector.tsx` | 872 | kind별 섹션이 한 파일에 몰려 있음 — 노드 추가 시 이 파일이 부풀어 오름 |
+| `features/editor/inspector/Inspector.tsx` | 872 | kind별 섹션이 한 파일에 몰려 있음 — 노드 추가 시 이 파일이 부풀어 오름 |
 | `stores/layoutStore.ts` | 858 | 문서/선택/히스토리/모듈/프리뷰/뷰포트 액션이 한 스토어에 혼재 |
 | `features/presets/presetRegistry.ts` | 615 | 프리셋 빌더 전부 집중, v1/v2 마이그레이션 로직 섞임 |
 | `features/canvas/NodeRenderer.tsx` | 431 | `switch (node.kind)` 중심, 모듈-ref·컨테이너·리프 분기 섞임 |
@@ -175,7 +175,7 @@ src/
 ├── stores/                 # 분할된 slices
 ├── nodes/                  # Phase 1 결과 — 노드 타입별 모듈
 ├── features/
-│   ├── editor/             # palette, layer-tree, inspector, toolbar
+│   ├── editor/             # palette, layer-tree, inspector, toolbar (→ `features/editor/*`로 일부 반영됨)
 │   ├── canvas/             # Canvas, CanvasViewport, DnD, ResizeHandles
 │   ├── node-view/
 │   ├── preview/

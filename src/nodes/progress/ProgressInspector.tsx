@@ -1,6 +1,6 @@
 import type { InspectorSectionProps } from "../types";
 import type { ProgressProps } from "@/types/layout";
-import { Field, NumberInput, TextInput } from "@/features/inspector/inspector-ui";
+import { Field, NumberInput, TextInput } from "@/features/editor/inspector/inspector-ui";
 
 export function ProgressInspector({ props, onChange }: InspectorSectionProps<ProgressProps>) {
   const p = props;

@@ -1,5 +1,6 @@
 // Button — 캔버스·프리뷰 공용 리프 (탭 그룹·테마·인터랙션은 프리뷰에서만 활성)
-import { memo, type CSSProperties } from "react";
+// named export는 `export function`으로만 제공 (index.ts에서 memo 래핑 후 register)
+import { type CSSProperties } from "react";
 import { cn } from "@/lib/cn";
 import type { LeafRenderProps } from "../types";
 import type { ButtonProps } from "@/types/layout";
@@ -8,7 +9,7 @@ import { applySizing } from "@/features/canvas/applySizing";
 import { normalizeSizing } from "@/lib/layoutSizing";
 import { runActions } from "@/features/preview/previewRuntime";
 
-function ButtonLeafImpl({ node, mode, theme, previewCtx, hover }: LeafRenderProps) {
+export function ButtonLeaf({ node, mode, theme, previewCtx, hover }: LeafRenderProps) {
   const p = node.props as ButtonProps;
 
   if (mode === "canvas") {
@@ -147,13 +148,3 @@ function ButtonLeafImpl({ node, mode, theme, previewCtx, hover }: LeafRenderProp
     </button>
   );
 }
-
-export const ButtonLeaf = memo(ButtonLeafImpl, (a, b) => {
-  return (
-    a.node === b.node &&
-    a.mode === b.mode &&
-    a.hover === b.hover &&
-    a.theme === b.theme &&
-    a.previewCtx === b.previewCtx
-  );
-});

@@ -6,8 +6,8 @@ import {
   Select,
   SegmentedControl,
   TextArea,
-} from "@/features/inspector/inspector-ui";
-import { ColorPicker } from "@/features/inspector/ColorPicker";
+} from "@/features/editor/inspector/inspector-ui";
+import { ColorPicker } from "@/features/editor/inspector/ColorPicker";
 
 export function TextInspector({ props, onChange }: InspectorSectionProps<TextProps>) {
   const p = props;

@@ -13,11 +13,11 @@ import {
   type DragStartEvent,
   type DropAnimation,
 } from "@dnd-kit/core";
-import { Toolbar } from "@/features/toolbar/Toolbar";
-import { Palette } from "@/features/palette/Palette";
+import { Toolbar } from "@/features/editor/toolbar/Toolbar";
+import { Palette } from "@/features/editor/palette/Palette";
 import { Canvas } from "@/features/canvas/Canvas";
-import { Inspector } from "@/features/inspector/Inspector";
-import { LayerTree } from "@/features/layer-tree/LayerTree";
+import { Inspector } from "@/features/editor/inspector/Inspector";
+import { LayerTree } from "@/features/editor/layer-tree/LayerTree";
 import { ModulePanel } from "@/features/modules/ModulePanel";
 import { useLayoutStore, createNode } from "@/stores/layoutStore";
 import { cn } from "@/lib/cn";

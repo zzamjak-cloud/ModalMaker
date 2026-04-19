@@ -5,8 +5,8 @@ import {
   NumberInput,
   SegmentedControl,
   TextInput,
-} from "@/features/inspector/inspector-ui";
-import { ColorPicker } from "@/features/inspector/ColorPicker";
+} from "@/features/editor/inspector/inspector-ui";
+import { ColorPicker } from "@/features/editor/inspector/ColorPicker";
 
 export function SplitInspector({ props, onChange }: InspectorSectionProps<SplitProps>) {
   const p = props;
