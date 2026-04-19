@@ -14,15 +14,11 @@ import {
 } from "./previewRuntime";
 import type {
   ButtonProps,
-  CheckboxProps,
   ContainerProps,
   FoldableProps,
-  IconProps,
   InputProps,
   LayoutNode,
   ModuleRefProps,
-  ProgressProps,
-  SplitProps,
 } from "@/types/layout";
 
 function containerLayoutStyle(p: ContainerProps): React.CSSProperties {
@@ -348,44 +344,6 @@ export function PreviewRenderer({
             {Icon && pos === "right" && <Icon size={iconPx} />}
           </button>
         );
-      }
-      case "checkbox": {
-        const p = node.props as CheckboxProps;
-        return (
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: t.textPrimary, cursor: "pointer" }}>
-            <input type="checkbox" defaultChecked={p.checked ?? false} style={{ width: 16, height: 16, accentColor: t.accentBg }} />
-            {p.label}
-          </label>
-        );
-      }
-      case "progress": {
-        const p = node.props as ProgressProps;
-        const pct = Math.max(0, Math.min(100, ((p.value ?? 0) / (p.max ?? 100)) * 100));
-        return (
-          <div style={{ width: "100%" }}>
-            {p.label && <div style={{ marginBottom: 4, fontSize: 12, color: t.textSecondary }}>{p.label}</div>}
-            <div style={{ height: 8, width: "100%", overflow: "hidden", borderRadius: 9999, backgroundColor: t.borderColor }}>
-              <div style={{ height: "100%", backgroundColor: t.accentBg, width: `${pct}%`, transition: "width 0.2s" }} />
-            </div>
-          </div>
-        );
-      }
-      case "split": {
-        const p = node.props as SplitProps;
-        const orientation = p.orientation ?? "horizontal";
-        const style = p.style ?? "solid";
-        const thickness = p.thickness ?? 1;
-        const color = p.color ?? t.borderColor;
-        if (orientation === "vertical") {
-          return <div style={{ borderLeftWidth: thickness, borderLeftStyle: style, borderLeftColor: color, minHeight: 24, alignSelf: "stretch" }} />;
-        }
-        return <div style={{ borderTopWidth: thickness, borderTopStyle: style, borderTopColor: color, width: "100%" }} />;
-      }
-      case "icon": {
-        const p = node.props as IconProps;
-        const Comp = getLucideIcon(p.name);
-        if (!Comp) return <span style={{ fontSize: 12, color: t.textMuted }}>?</span>;
-        return <Comp size={p.size ?? 20} color={p.color ?? t.textPrimary} />;
       }
       default:
         return null;

@@ -12,16 +12,12 @@ import { ColorPicker } from "./ColorPicker";
 import { getDescriptor } from "@/nodes/registry";
 import type {
   ButtonProps,
-  CheckboxProps,
   ContainerProps,
   FoldableProps,
-  IconProps,
   InputProps,
   LayoutNode,
   ModuleRefProps,
   NodeProps,
-  ProgressProps,
-  SplitProps,
 } from "@/types/layout";
 
 export function Inspector() {
@@ -444,96 +440,6 @@ function KindFields({
               options={["text", "email", "password", "number"]}
               onChange={(v) => onChange({ type: v })}
             />
-          </Field>
-        </>
-      );
-    }
-    case "checkbox": {
-      const p = node.props as CheckboxProps;
-      return (
-        <>
-          <Field label="Label">
-            <TextInput value={p.label} onChange={(v) => onChange({ label: v })} />
-          </Field>
-          <Field label="Checked">
-            <Toggle value={p.checked ?? false} onChange={(v) => onChange({ checked: v })} />
-          </Field>
-        </>
-      );
-    }
-    case "progress": {
-      const p = node.props as ProgressProps;
-      return (
-        <>
-          <Field label="Label">
-            <TextInput value={p.label ?? ""} onChange={(v) => onChange({ label: v })} />
-          </Field>
-          <Field label="Value">
-            <NumberInput value={p.value} min={0} max={p.max ?? 100} onChange={(v) => onChange({ value: v })} />
-          </Field>
-          <Field label="Max">
-            <NumberInput value={p.max ?? 100} min={1} onChange={(v) => onChange({ max: v })} />
-          </Field>
-        </>
-      );
-    }
-    case "split": {
-      const p = node.props as SplitProps;
-      return (
-        <>
-          <Field label="Orientation">
-            <SegmentedControl
-              value={p.orientation ?? "horizontal"}
-              options={[
-                { value: "horizontal", label: "가로선" },
-                { value: "vertical", label: "세로선" },
-              ]}
-              onChange={(v) => onChange({ orientation: v })}
-            />
-          </Field>
-          <Field label="Style">
-            <SegmentedControl
-              value={p.style ?? "solid"}
-              options={[
-                { value: "solid", label: "실선" },
-                { value: "dashed", label: "대시" },
-                { value: "dotted", label: "점선" },
-              ]}
-              onChange={(v) => onChange({ style: v })}
-            />
-          </Field>
-          <Field label="Thickness (px)">
-            <NumberInput
-              value={p.thickness ?? 1}
-              min={1}
-              max={16}
-              onChange={(v) => onChange({ thickness: v })}
-            />
-          </Field>
-          <Field label="Color">
-            <ColorPicker value={p.color ?? "#525252"} onChange={(v) => onChange({ color: v })} />
-          </Field>
-          <Field label="Label (선택)">
-            <TextInput
-              value={p.label ?? ""}
-              onChange={(v) => onChange({ label: v })}
-            />
-          </Field>
-        </>
-      );
-    }
-    case "icon": {
-      const p = node.props as IconProps;
-      return (
-        <>
-          <Field label="Icon">
-            <IconPicker value={p.name} onChange={(v) => onChange({ name: v || "HelpCircle" })} />
-          </Field>
-          <Field label="Size (px)">
-            <NumberInput value={p.size ?? 20} min={8} max={128} onChange={(v) => onChange({ size: v })} />
-          </Field>
-          <Field label="Color">
-            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
         </>
       );

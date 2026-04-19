@@ -4,6 +4,10 @@
 
 // 각 kind 모듈 side-effect import (register 실행)
 import "./text";
+import "./icon";
+import "./progress";
+import "./checkbox";
+import "./split";
 
 // 레지스트리 API 재노출
 export * from "./registry";
