@@ -25,6 +25,101 @@ async function safe<T>(label: string, fallback: T, fn: () => Promise<T>): Promis
   }
 }
 
+/**
+ * 기존 'modalmaker-db' DB에서 문서·프리셋을 신규 v2 DB로 일회성 마이그레이션.
+ * idb-keyval 경유 시 version 충돌로 실패하므로 raw IndexedDB API를 직접 사용.
+ * 신규 DB에 이미 데이터가 있으면 skip (사용자가 이미 새로 저장함).
+ */
+let legacyMigrationPromise: Promise<void> | null = null;
+function ensureLegacyMigrated(): Promise<void> {
+  if (!legacyMigrationPromise) legacyMigrationPromise = migrateLegacy();
+  return legacyMigrationPromise;
+}
+
+async function migrateLegacy(): Promise<void> {
+  try {
+    // 신규 DB에 데이터가 있으면 이미 사용자가 새로 작업 중 → skip
+    const [existingDocs, existingPresets] = await Promise.all([
+      safe("docs count", [], () => idbKeys(DOC_STORE) as Promise<string[]>),
+      safe("presets count", [], () => idbKeys(PRESET_STORE) as Promise<string[]>),
+    ]);
+    if (existingDocs.length > 0 && existingPresets.length > 0) return;
+
+    const legacyDB = await openRawDB("modalmaker-db");
+    if (!legacyDB) return;
+
+    let migratedDocs = 0;
+    let migratedPresets = 0;
+    try {
+      if (existingDocs.length === 0 && legacyDB.objectStoreNames.contains("documents")) {
+        const items = await readAllFromStore(legacyDB, "documents");
+        for (const raw of items) {
+          if (raw && typeof (raw as { id?: unknown }).id === "string") {
+            const id = (raw as { id: string }).id;
+            await safe("migrate doc", undefined, async () => {
+              await idbSet(id, raw, DOC_STORE);
+              migratedDocs++;
+            });
+          }
+        }
+      }
+      if (existingPresets.length === 0 && legacyDB.objectStoreNames.contains("userPresets")) {
+        const items = await readAllFromStore(legacyDB, "userPresets");
+        for (const raw of items) {
+          if (raw && typeof (raw as { id?: unknown }).id === "string") {
+            const id = (raw as { id: string }).id;
+            await safe("migrate preset", undefined, async () => {
+              await idbSet(id, raw, PRESET_STORE);
+              migratedPresets++;
+            });
+          }
+        }
+      }
+    } finally {
+      legacyDB.close();
+    }
+    if (migratedDocs + migratedPresets > 0) {
+      logger.info(
+        "persistence",
+        `legacy migration: ${migratedDocs} docs, ${migratedPresets} presets from modalmaker-db`,
+      );
+    }
+  } catch (err) {
+    logger.error("persistence", "legacy migration failed", err);
+  }
+}
+
+/** version 지정 없이 IndexedDB를 열어 기존 DB의 현재 version을 그대로 사용 */
+function openRawDB(dbName: string): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(dbName);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+      req.onupgradeneeded = () => {
+        // 기존 DB가 존재하지 않으면 빈 DB가 생성됨 — 그대로 resolve
+      };
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function readAllFromStore(db: IDBDatabase, storeName: string): Promise<unknown[]> {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(storeName, "readonly");
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result ?? []);
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
 export interface PersistenceAdapter {
   listDocuments(): Promise<NodeDocument[]>;
   saveDocument(doc: NodeDocument): Promise<void>;
@@ -61,7 +156,11 @@ async function listAllPresets(
 }
 
 export const localAdapter: PersistenceAdapter = {
-  listDocuments: () => safe("listDocuments", [], () => listAllDocs(DOC_STORE)),
+  listDocuments: () =>
+    safe("listDocuments", [], async () => {
+      await ensureLegacyMigrated();
+      return listAllDocs(DOC_STORE);
+    }),
 
   saveDocument: (doc) =>
     safe("saveDocument", undefined, async () => {
@@ -70,12 +169,14 @@ export const localAdapter: PersistenceAdapter = {
 
   loadDocument: (id) =>
     safe("loadDocument", null, async () => {
+      await ensureLegacyMigrated();
       const raw = (await idbGet<AnyDoc>(id, DOC_STORE)) ?? null;
       return raw ? migrateToV2(raw) : null;
     }),
 
   duplicateDocument: (id) =>
     safe("duplicateDocument", null, async () => {
+      await ensureLegacyMigrated();
       const raw = await idbGet<AnyDoc>(id, DOC_STORE);
       if (!raw) return null;
       const src = migrateToV2(raw);
@@ -89,7 +190,11 @@ export const localAdapter: PersistenceAdapter = {
       await idbDel(id, DOC_STORE);
     }),
 
-  listUserPresets: () => safe("listUserPresets", [], () => listAllPresets(PRESET_STORE)),
+  listUserPresets: () =>
+    safe("listUserPresets", [], async () => {
+      await ensureLegacyMigrated();
+      return listAllPresets(PRESET_STORE);
+    }),
 
   saveUserPreset: (doc) =>
     safe("saveUserPreset", undefined, async () => {
