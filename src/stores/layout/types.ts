@@ -29,6 +29,12 @@ export interface LayoutState {
   editingModuleId: string | null;
   past: NodeDocument[];
   future: NodeDocument[];
+  /**
+   * 히스토리 coalesce 키 — 같은 키로 연속 커밋되면 past에 추가 스냅샷을 쌓지 않는다.
+   * 예: `updateProps:<nodeId>` — 텍스트 입력 1자마다 undo 엔트리가 생기는 것을 방지.
+   * 다른 뮤테이션이 발생하면 null이 되며 다음 commit은 새 엔트리를 만든다.
+   */
+  lastCoalesceKey: string | null;
 
   setDocument: (doc: LayoutDocument | NodeDocument) => void;
   resetDocument: () => void;

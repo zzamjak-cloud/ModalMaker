@@ -15,6 +15,8 @@ export function buildHistorySlice(set: LayoutSet, get: LayoutGet) {
           past: s.past.slice(0, -1),
           future: [snapshot(s.document), ...s.future],
           document: prev,
+          // undo 후 같은 키로 들어오는 뮤테이션은 새 엔트리로 취급
+          lastCoalesceKey: null,
         };
       }),
 
@@ -26,6 +28,7 @@ export function buildHistorySlice(set: LayoutSet, get: LayoutGet) {
           past: [...s.past, snapshot(s.document)],
           future: s.future.slice(1),
           document: nxt,
+          lastCoalesceKey: null,
         };
       }),
 

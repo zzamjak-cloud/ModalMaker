@@ -18,7 +18,7 @@ import {
   isAncestor,
   removeFromParent,
 } from "./graph";
-import { commit } from "./commit";
+import { commit, commitCoalesce } from "./commit";
 import { cloneWithNewIds } from "./cloneTree";
 
 type LayoutSet = StoreApi<LayoutState>["setState"];
@@ -106,7 +106,9 @@ export function buildNodeActions(
 
     updateProps: (id, patch) =>
       set((s) =>
-        commit(s, (draft) => {
+        // 같은 노드에 대한 연속 updateProps는 단일 undo 엔트리로 coalesce.
+        // 다른 노드·다른 액션이 끼어들면 coalesce 체인이 끊기고 다음 업데이트는 새 엔트리.
+        commitCoalesce(s, `updateProps:${id}`, (draft) => {
           const root = activeRootInDraft(draft, s.editingModuleId);
           if (!root) return;
           const node = findLayoutNode(root, id);
@@ -184,7 +186,8 @@ export function buildNodeActions(
 
     updateTitle: (title) =>
       set((s) =>
-        commit(s, (draft) => {
+        // 문서 제목 타이핑도 coalesce (1자마다 undo 엔트리 쌓이는 것 방지)
+        commitCoalesce(s, "updateTitle", (draft) => {
           draft.title = title;
         }),
       ),

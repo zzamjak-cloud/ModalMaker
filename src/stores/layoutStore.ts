@@ -188,6 +188,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   editingModuleId: null,
   past: [],
   future: [],
+  lastCoalesceKey: null,
 
   ...buildSelectionSlice(set),
   ...buildHistorySlice(set, get),
@@ -199,6 +200,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       document: migrateToV2(doc),
       past: [],
       future: [],
+      lastCoalesceKey: null,
       selectedId: null,
       selectedIds: [],
       selectedPageId: null,
@@ -210,6 +212,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       document: createEmptyNodeDocument(),
       past: [],
       future: [],
+      lastCoalesceKey: null,
       selectedId: null,
       selectedIds: [],
       selectedPageId: null,
