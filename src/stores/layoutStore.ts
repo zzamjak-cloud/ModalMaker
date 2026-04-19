@@ -12,9 +12,6 @@ import { getDescriptor } from "@/nodes/registry";
 import {
   isContainerKind,
   type Interaction,
-  type InteractionAction,
-  type InteractionEvent,
-  type LayoutDocument,
   type LayoutNode,
   type Module,
   type ModuleRefProps,
@@ -23,11 +20,21 @@ import {
   type NodeProps,
   type Page,
   type PageEdge,
-  type SizingProps,
-  type ViewportSettings,
 } from "@/types/layout";
-
-const HISTORY_LIMIT = 100;
+import type { LayoutState } from "./layout/types";
+import {
+  activeRoot,
+  activeRootInDraft,
+  findLayoutNode,
+  findLayoutParent,
+  isAncestor,
+  pruneModuleRefs,
+  removeFromParent,
+} from "./layout/graph";
+import { commit, snapshot, HISTORY_LIMIT } from "./layout/commit";
+import { buildSelectionSlice } from "./layout/selectionSlice";
+import { buildHistorySlice } from "./layout/historySlice";
+import { buildUiSlice } from "./layout/uiSlice";
 
 // 기본 노드 템플릿
 export function createNode(kind: NodeKind, overrides: Partial<LayoutNode> = {}): LayoutNode {
@@ -100,72 +107,6 @@ function createEmptyPage(title: string, index: number): Page {
     }),
     position: { x: index * 360, y: 0 },
   };
-}
-
-// 현재 페이지 조회 (currentPageId가 유효하지 않으면 첫 페이지 폴백).
-export function currentPage(doc: NodeDocument): Page | null {
-  if (!doc.pages.length) return null;
-  return doc.pages.find((p) => p.id === doc.currentPageId) ?? doc.pages[0];
-}
-
-// 활성 편집 대상 root. 모듈 편집 중이면 모듈 root, 아니면 현재 페이지 root.
-export function activeRoot(state: LayoutState): LayoutNode | null {
-  if (state.editingModuleId) {
-    return (
-      state.document.modules.find((m) => m.id === state.editingModuleId)?.root ?? null
-    );
-  }
-  return currentPage(state.document)?.root ?? null;
-}
-
-// Immer draft 환경에서 안전하게 activeRoot를 얻기 위한 헬퍼
-function activeRootInDraft(
-  draft: NodeDocument,
-  editingModuleId: string | null,
-): LayoutNode | null {
-  if (editingModuleId) {
-    return draft.modules.find((m) => m.id === editingModuleId)?.root ?? null;
-  }
-  const pg = draft.pages.find((p) => p.id === draft.currentPageId) ?? draft.pages[0];
-  return pg?.root ?? null;
-}
-
-// 트리 순회: id로 노드 찾기 (Immer draft 호환)
-function findNode(root: LayoutNode, id: string): LayoutNode | null {
-  if (root.id === id) return root;
-  if (!root.children) return null;
-  for (const c of root.children) {
-    const hit = findNode(c, id);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-function findParent(root: LayoutNode, childId: string): LayoutNode | null {
-  if (!root.children) return null;
-  for (const c of root.children) {
-    if (c.id === childId) return root;
-    const hit = findParent(c, childId);
-    if (hit) return hit;
-  }
-  return null;
-}
-
-function removeFromParent(parent: LayoutNode, childId: string): LayoutNode | null {
-  if (!parent.children) return null;
-  const idx = parent.children.findIndex((c) => c.id === childId);
-  if (idx < 0) return null;
-  const [removed] = parent.children.splice(idx, 1);
-  return removed;
-}
-
-function isAncestor(node: LayoutNode, possibleDescendantId: string): boolean {
-  if (!node.children) return false;
-  for (const c of node.children) {
-    if (c.id === possibleDescendantId) return true;
-    if (isAncestor(c, possibleDescendantId)) return true;
-  }
-  return false;
 }
 
 // 서브트리를 재귀 복제하면서 모든 id를 새로 발급
@@ -264,101 +205,6 @@ export function cloneDocumentWithNewIds(
   };
 }
 
-// 재귀적으로 특정 module-ref를 제거 (removeModule에서 사용)
-function pruneModuleRefs(node: LayoutNode, moduleId: string): void {
-  if (!node.children) return;
-  node.children = node.children.filter((c) => {
-    if (c.kind === "module-ref" && (c.props as ModuleRefProps).moduleId === moduleId) {
-      return false;
-    }
-    pruneModuleRefs(c, moduleId);
-    return true;
-  });
-}
-
-export type EditorMode = "canvas" | "node" | "preview";
-
-export interface LayoutState {
-  document: NodeDocument;
-  mode: EditorMode;
-  selectedId: string | null;
-  selectedIds: string[];
-  toggleSelectMulti: (id: string) => void;
-  clearMultiSelect: () => void;
-  updatePropsMulti: (ids: string[], patch: Partial<NodeProps>) => void;
-  selectedPageId: string | null;
-  editingModuleId: string | null;
-  past: NodeDocument[];
-  future: NodeDocument[];
-
-  // 기존 액션 (시그니처 유지)
-  setDocument: (doc: LayoutDocument | NodeDocument) => void;
-  resetDocument: () => void;
-  select: (id: string | null) => void;
-  addNode: (parentId: string, node: LayoutNode, index?: number) => void;
-  addNewNode: (parentId: string, kind: NodeKind, index?: number) => LayoutNode;
-  moveNode: (nodeId: string, targetParentId: string, index?: number) => void;
-  updateProps: (id: string, patch: Partial<NodeProps>) => void;
-  updateTitle: (title: string) => void;
-  updateViewport: (patch: Partial<ViewportSettings>) => void;
-  /** sizing·flexMainAxis 등 노드 프레임 필드 병합 */
-  patchNode: (
-    id: string,
-    patch: {
-      sizing?: Partial<SizingProps>;
-      flexMainAxis?: LayoutNode["flexMainAxis"] | null;
-    },
-  ) => void;
-  updateSizing: (id: string, patch: Partial<SizingProps>) => void;
-  addInteraction: (nodeId: string, event: InteractionEvent, action: InteractionAction) => Interaction | null;
-  updateInteraction: (nodeId: string, interactionId: string, patch: Partial<Omit<Interaction, "id">>) => void;
-  removeInteraction: (nodeId: string, interactionId: string) => void;
-  removeNode: (id: string) => void;
-  duplicateNode: (id: string) => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
-
-  // 신규 액션 (Phase A)
-  addPage: (title?: string, root?: LayoutNode) => Page;
-  duplicatePage: (pageId: string, x?: number, y?: number) => void;
-  removePage: (pageId: string) => void;
-  updatePage: (pageId: string, patch: Partial<Omit<Page, "id" | "root">>) => void;
-  setCurrentPage: (pageId: string) => void;
-  movePage: (pageId: string, x: number, y: number) => void;
-
-  registerModule: (sourceNodeId: string) => Module | null;
-  unlinkModule: (nodeId: string) => void;
-  updateModule: (moduleId: string, patch: Partial<Omit<Module, "id" | "root">>) => void;
-  removeModule: (moduleId: string) => void;
-  enterModuleEdit: (moduleId: string) => void;
-  exitModuleEdit: () => void;
-
-  addEdge: (source: string, target: string, sourceHandle?: string) => PageEdge;
-  removeEdge: (edgeId: string) => void;
-
-  setMode: (mode: EditorMode) => void;
-}
-
-function snapshot(doc: NodeDocument): NodeDocument {
-  return JSON.parse(JSON.stringify(doc));
-}
-
-function commit(
-  state: LayoutState,
-  mutate: (draft: NodeDocument) => void,
-): Partial<LayoutState> {
-  const prev = snapshot(state.document);
-  const next = produce(state.document, (draft) => {
-    mutate(draft);
-    draft.updatedAt = Date.now();
-  });
-  if (next === state.document) return {};
-  const past = [...state.past, prev].slice(-HISTORY_LIMIT);
-  return { document: next, past, future: [] };
-}
-
 export const useLayoutStore = create<LayoutState>((set, get) => ({
   document: createEmptyNodeDocument(),
   mode: "canvas",
@@ -368,6 +214,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   editingModuleId: null,
   past: [],
   future: [],
+
+  ...buildSelectionSlice(set),
+  ...buildHistorySlice(set, get),
+  ...buildUiSlice(set),
 
   setDocument: (doc) =>
     set(() => ({
@@ -391,44 +241,13 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       editingModuleId: null,
     })),
 
-  select: (id) => set({ selectedId: id, selectedIds: [] }),
-
-  toggleSelectMulti: (id: string) =>
-    set((s) => {
-      const root = activeRoot(s);
-      if (!root) return {};
-      const clickedNode = findNode(root, id);
-      if (!clickedNode) return {};
-      const current =
-        s.selectedIds.length > 0
-          ? s.selectedIds
-          : s.selectedId
-            ? [s.selectedId]
-            : [];
-      if (current.length > 0) {
-        const firstNode = findNode(root, current[0]);
-        if (firstNode && firstNode.kind !== clickedNode.kind) return {};
-      }
-      let next: string[];
-      if (current.includes(id)) {
-        next = current.filter((i) => i !== id);
-      } else {
-        next = [...current, id];
-      }
-      if (next.length === 0) return { selectedIds: [], selectedId: null };
-      if (next.length === 1) return { selectedIds: [], selectedId: next[0] };
-      return { selectedIds: next };
-    }),
-
-  clearMultiSelect: () => set({ selectedIds: [], selectedId: null }),
-
   updatePropsMulti: (ids, patch) =>
     set((s) =>
       commit(s, (draft) => {
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
         for (const id of ids) {
-          const node = findNode(root, id);
+          const node = findLayoutNode(root, id);
           if (!node) continue;
           Object.assign(node.props, patch);
         }
@@ -440,7 +259,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
-        const parent = findNode(root, parentId);
+        const parent = findLayoutNode(root, parentId);
         if (!parent || !isContainerKind(parent.kind)) return;
         parent.children ??= [];
         const i = index ?? parent.children.length;
@@ -460,10 +279,10 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
         if (nodeId === root.id) return; // 루트는 이동 불가
-        const sourceParent = findParent(root, nodeId);
-        const target = findNode(root, targetParentId);
+        const sourceParent = findLayoutParent(root, nodeId);
+        const target = findLayoutNode(root, targetParentId);
         if (!sourceParent || !target || !isContainerKind(target.kind)) return;
-        const srcNode = findNode(root, nodeId);
+        const srcNode = findLayoutNode(root, nodeId);
         if (!srcNode) return;
         if (isAncestor(srcNode, targetParentId)) return;
         const removed = removeFromParent(sourceParent, nodeId);
@@ -479,7 +298,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
-        const node = findNode(root, id);
+        const node = findLayoutNode(root, id);
         if (!node) return;
         node.props = { ...node.props, ...patch } as NodeProps;
       }),
@@ -490,7 +309,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
-        const node = findNode(root, id);
+        const node = findLayoutNode(root, id);
         if (!node) return;
         if (patch.sizing !== undefined) {
           node.sizing = mergeSizingPatch(node.sizing ?? {}, patch.sizing);
@@ -513,7 +332,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const draftRoot = activeRootInDraft(draft, s.editingModuleId);
         if (!draftRoot) return;
-        const node = findNode(draftRoot, nodeId);
+        const node = findLayoutNode(draftRoot, nodeId);
         if (!node) return;
         const entry: Interaction = {
           id: newId("int"),
@@ -532,7 +351,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const draftRoot = activeRootInDraft(draft, s.editingModuleId);
         if (!draftRoot) return;
-        const node = findNode(draftRoot, nodeId);
+        const node = findLayoutNode(draftRoot, nodeId);
         if (!node?.interactions) return;
         const idx = node.interactions.findIndex((i) => i.id === interactionId);
         if (idx < 0) return;
@@ -545,7 +364,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const draftRoot = activeRootInDraft(draft, s.editingModuleId);
         if (!draftRoot) return;
-        const node = findNode(draftRoot, nodeId);
+        const node = findLayoutNode(draftRoot, nodeId);
         if (!node?.interactions) return;
         node.interactions = node.interactions.filter((i) => i.id !== interactionId);
         if (node.interactions.length === 0) delete node.interactions;
@@ -577,7 +396,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
         if (id === root.id) return;
-        const parent = findParent(root, id);
+        const parent = findLayoutParent(root, id);
         if (!parent) return;
         removeFromParent(parent, id);
       }),
@@ -589,7 +408,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         const root = activeRootInDraft(draft, s.editingModuleId);
         if (!root) return;
         if (id === root.id) return;
-        const parent = findParent(root, id);
+        const parent = findLayoutParent(root, id);
         if (!parent?.children) return;
         const idx = parent.children.findIndex((c) => c.id === id);
         if (idx < 0) return;
@@ -597,31 +416,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         parent.children.splice(idx + 1, 0, clone);
       }),
     ),
-
-  undo: () =>
-    set((s) => {
-      const prev = s.past[s.past.length - 1];
-      if (!prev) return {};
-      return {
-        past: s.past.slice(0, -1),
-        future: [snapshot(s.document), ...s.future],
-        document: prev,
-      };
-    }),
-
-  redo: () =>
-    set((s) => {
-      const nxt = s.future[0];
-      if (!nxt) return {};
-      return {
-        past: [...s.past, snapshot(s.document)],
-        future: s.future.slice(1),
-        document: nxt,
-      };
-    }),
-
-  canUndo: () => get().past.length > 0,
-  canRedo: () => get().future.length > 0,
 
   // --- 신규 액션 ---
 
@@ -692,7 +486,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       }
       // 제거된 페이지 내부 노드가 선택돼있었다면 clear
       const selectionBelongsToRemoved = s.selectedId
-        ? findNode(target.root, s.selectedId) !== null
+        ? findLayoutNode(target.root, s.selectedId) !== null
         : false;
       return {
         document: finalDoc,
@@ -734,7 +528,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const st = get();
     const root = activeRoot(st);
     if (!root) return null;
-    const src = findNode(root, sourceNodeId);
+    const src = findLayoutNode(root, sourceNodeId);
     if (!src) return null;
     // 조건: 컨테이너여야 하고, 루트/이미 module-ref는 금지
     if (!isContainerKind(src.kind)) return null;
@@ -757,7 +551,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         draft.modules.push(mod);
         const activeRootDraft = activeRootInDraft(draft, s.editingModuleId);
         if (!activeRootDraft) return;
-        const node = findNode(activeRootDraft, sourceNodeId);
+        const node = findLayoutNode(activeRootDraft, sourceNodeId);
         if (!node) return;
         node.kind = "module-ref";
         node.children = undefined;
@@ -771,7 +565,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
     const st = get();
     const root = activeRoot(st);
     if (!root) return;
-    const node = findNode(root, nodeId);
+    const node = findLayoutNode(root, nodeId);
     if (!node || node.kind !== "module-ref") return;
     const p = node.props as ModuleRefProps;
     const mod = st.document.modules.find((m) => m.id === p.moduleId);
@@ -782,7 +576,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       commit(s, (draft) => {
         const ar = activeRootInDraft(draft, s.editingModuleId);
         if (!ar) return;
-        const parent = findParent(ar, nodeId);
+        const parent = findLayoutParent(ar, nodeId);
         if (!parent?.children) return;
         const idx = parent.children.findIndex((c) => c.id === nodeId);
         if (idx < 0) return;
@@ -809,15 +603,6 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         draft.modules.forEach((m) => pruneModuleRefs(m.root, moduleId));
       }),
     ),
-
-  enterModuleEdit: (moduleId) =>
-    set((s) => {
-      const exists = s.document.modules.some((m) => m.id === moduleId);
-      if (!exists) return {};
-      return { editingModuleId: moduleId, selectedId: null, selectedIds: [] };
-    }),
-
-  exitModuleEdit: () => set({ editingModuleId: null, selectedId: null, selectedIds: [] }),
 
   addEdge: (source, target, sourceHandle) => {
     const st = get();
@@ -848,15 +633,7 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
         draft.edges = draft.edges.filter((e) => e.id !== edgeId);
       }),
     ),
-
-  setMode: (mode) => set({ mode }),
 }));
 
-/** 트리에서 id로 노드 조회 (인스펙터·리사이즈 핸들 등에서 사용) */
-export function findLayoutNode(root: LayoutNode, id: string): LayoutNode | null {
-  return findNode(root, id);
-}
-
-export function findLayoutParent(root: LayoutNode, childId: string): LayoutNode | null {
-  return findParent(root, childId);
-}
+export { currentPage, activeRoot, findLayoutNode, findLayoutParent } from "./layout/graph";
+export type { EditorMode, LayoutState } from "./layout/types";
