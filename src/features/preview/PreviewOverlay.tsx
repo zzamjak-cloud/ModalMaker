@@ -1,14 +1,15 @@
 // 프리뷰 풀스크린 오버레이 — 히스토리 스택 + 테마 선택 지원
-import { Fragment, useState, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { X, ChevronLeft, RotateCcw, Palette } from "lucide-react";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { usePreviewSessionStore } from "./previewSessionStore";
 import { PreviewRenderer } from "./PreviewRenderer";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 import { useThemeStore } from "./themeStore";
 import { THEME_LABELS, type ThemeName, type ThemeTokens } from "./themes";
 import type { PreviewContext } from "./previewRuntime";
 import { VIEWPORT_PRESETS } from "@/types/layout";
-import type { LayoutNode, ButtonProps, ModuleRefProps, NodeDocument, Page, ViewportSettings } from "@/types/layout";
+import type { Page, ViewportSettings } from "@/types/layout";
 
 // 뷰포트 설정 → 픽셀 크기. free/undefined면 null 반환.
 function resolveViewportSize(v?: ViewportSettings) {
@@ -120,36 +121,6 @@ function PopupViewportFrame({ page, children }: { page?: Page; children: ReactNo
   );
 }
 
-function initTabActiveMap(doc: NodeDocument): Record<string, string> {
-  const map: Record<string, string> = {};
-  const moduleMap = new Map(doc.modules.map((m) => [m.id, m.root]));
-
-  function walk(node: LayoutNode, visited: Set<string> = new Set()) {
-    if (node.kind === "button") {
-      const p = node.props as ButtonProps;
-      if (p.tabGroupId && p.tabDefaultActive) {
-        map[p.tabGroupId] = node.id;
-      }
-    } else if (node.kind === "module-ref") {
-      // module-ref 내부를 순환 참조 방지하며 탐색
-      const p = node.props as ModuleRefProps;
-      if (!visited.has(p.moduleId)) {
-        const modRoot = moduleMap.get(p.moduleId);
-        if (modRoot) {
-          const next = new Set(visited);
-          next.add(p.moduleId);
-          walk(modRoot, next);
-        }
-      }
-    }
-    node.children?.forEach((c) => walk(c, visited));
-  }
-
-  // 모든 페이지 탐색 — 페이지 이동 후에도 기본 활성 상태가 올바르게 설정됨
-  doc.pages.forEach((page) => walk(page.root));
-  return map;
-}
-
 const THEME_OPTIONS: ThemeName[] = ["os", "dark", "light", "warm", "ocean"];
 
 function ThemePicker() {
@@ -206,78 +177,38 @@ function previewDot(opt: ThemeName, current: ThemeTokens): string {
 function PreviewContent() {
   const document = useLayoutStore((s) => s.document);
   const setMode = useLayoutStore((s) => s.setMode);
-  // 항상 첫 번째 비팝업 페이지에서 시작 (마지막 편집 페이지가 아닌 홈 페이지)
-  const initialPageId =
-    document.pages.find((p) => !p.isPopup)?.id ?? document.currentPageId;
   const t = useTheme();
 
-  const [currentPageId, setCurrentPageId] = useState(initialPageId);
-  const [history, setHistory] = useState<string[]>([]);
+  const currentPageId = usePreviewSessionStore((s) => s.currentPageId);
+  const history = usePreviewSessionStore((s) => s.history);
+  const tabActiveMap = usePreviewSessionStore((s) => s.tabActiveMap);
+  const navigate = usePreviewSessionStore((s) => s.navigate);
+  const close = usePreviewSessionStore((s) => s.close);
+  const back = usePreviewSessionStore((s) => s.back);
+  const jumpToHistory = usePreviewSessionStore((s) => s.jumpToHistory);
+  const reset = usePreviewSessionStore((s) => s.reset);
+  const setTabActive = usePreviewSessionStore((s) => s.setTabActive);
+  const hydrate = usePreviewSessionStore((s) => s.hydrate);
+  const clearSession = usePreviewSessionStore((s) => s.clear);
 
-  const [tabActiveMap, setTabActiveMapState] = useState<Record<string, string>>(
-    () => initTabActiveMap(document),
-  );
+  useLayoutEffect(() => {
+    hydrate(useLayoutStore.getState().document);
+    return () => clearSession();
+  }, [hydrate, clearSession]);
 
-  const setTabActive = useCallback(
-    (groupId: string, nodeId: string) =>
-      setTabActiveMapState((prev) => ({ ...prev, [groupId]: nodeId })),
-    [],
-  );
-
-  const page = document.pages.find((p) => p.id === currentPageId) ?? document.pages[0];
+  const page =
+    currentPageId != null
+      ? (document.pages.find((p) => p.id === currentPageId) ?? document.pages[0])
+      : document.pages[0];
   const isCurrentPopup = page?.isPopup ?? false;
   const bgPage = isCurrentPopup && history.length > 0
     ? (document.pages.find((p) => p.id === history[history.length - 1]) ?? null)
     : null;
 
-  const navigate = useCallback(
-    (pageId: string, replace?: boolean) => {
-      if (pageId === currentPageId) return;
-      if (!document.pages.some((p) => p.id === pageId)) return;
-      if (replace) {
-        setCurrentPageId(pageId);
-      } else {
-        setHistory((h) => [...h, currentPageId]);
-        setCurrentPageId(pageId);
-      }
-    },
-    [currentPageId, document.pages],
-  );
-
-  const exitPreview = useCallback(() => setMode("canvas"), [setMode]);
-
-  const back = useCallback(() => {
-    setHistory((h) => {
-      if (h.length === 0) return h;
-      const prev = h[h.length - 1];
-      setCurrentPageId(prev);
-      return h.slice(0, -1);
-    });
-  }, []);
-
-  // 히스토리 특정 인덱스 항목으로 직접 이동
-  const jumpToHistory = useCallback((idx: number) => {
-    setCurrentPageId(history[idx]);
-    setHistory(history.slice(0, idx));
-  }, [history]);
-
-  // 인터렉션 close 액션: 프리뷰 종료 대신 뒤로 가기 또는 지정 페이지 이동
-  const close = useCallback(
-    (targetPageId?: string) => {
-      if (targetPageId && document.pages.some((p) => p.id === targetPageId)) {
-        setHistory((h) => [...h, currentPageId]);
-        setCurrentPageId(targetPageId);
-      } else {
-        back();
-      }
-    },
-    [back, document.pages, currentPageId],
-  );
-
-  const reset = useCallback(() => {
-    setCurrentPageId(initialPageId);
-    setHistory([]);
-  }, [initialPageId]);
+  const exitPreview = () => {
+    clearSession();
+    setMode("canvas");
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -313,7 +244,7 @@ function PreviewContent() {
         </button>
         <Breadcrumbs
           history={history}
-          currentPageId={currentPageId}
+          currentPageId={currentPageId ?? page?.id ?? ""}
           pages={document.pages}
           onJump={jumpToHistory}
         />
