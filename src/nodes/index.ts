@@ -11,6 +11,8 @@ import "./split";
 import "./input";
 import "./button";
 import "./foldable";
+import "./container";
+import "./module-ref";
 
 // 레지스트리 API 재노출
 export * from "./registry";

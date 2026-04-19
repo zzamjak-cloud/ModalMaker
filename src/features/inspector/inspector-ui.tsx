@@ -131,6 +131,96 @@ export function Toggle({ value, onChange }: { value: boolean; onChange: (v: bool
   );
 }
 
+/** 레이블 좌측 + 작은 숫자 입력 (Padding·Margin 4-방향 그리드용) */
+export function LabeledNumber({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="w-10 shrink-0 text-[10px] uppercase tracking-wider text-neutral-500">
+        {label}
+      </span>
+      <input
+        type="number"
+        value={value}
+        min={0}
+        max={64}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-1.5 py-1 text-xs text-neutral-100 focus:border-sky-500 focus:outline-none"
+      />
+    </label>
+  );
+}
+
+/** 균일 / 4방향 개별 값 토글을 지원하는 Padding 필드 */
+export function PaddingField({
+  uniform,
+  uniformValue,
+  top,
+  right,
+  bottom,
+  left,
+  onChange,
+}: {
+  uniform: boolean;
+  uniformValue: number;
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  onChange: (patch: Record<string, unknown>) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-neutral-400">Padding</span>
+        <label className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+          <input
+            type="checkbox"
+            checked={uniform}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? { uniformPadding: true }
+                  : {
+                      uniformPadding: false,
+                      paddingTop: top,
+                      paddingRight: right,
+                      paddingBottom: bottom,
+                      paddingLeft: left,
+                    },
+              )
+            }
+            className="h-3.5 w-3.5 accent-sky-500"
+          />
+          Uniform
+        </label>
+      </div>
+      {uniform ? (
+        <NumberInput
+          value={uniformValue}
+          min={0}
+          max={64}
+          onChange={(v) => onChange({ padding: v })}
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5">
+          <LabeledNumber label="Top" value={top} onChange={(v) => onChange({ paddingTop: v })} />
+          <LabeledNumber label="Right" value={right} onChange={(v) => onChange({ paddingRight: v })} />
+          <LabeledNumber label="Bottom" value={bottom} onChange={(v) => onChange({ paddingBottom: v })} />
+          <LabeledNumber label="Left" value={left} onChange={(v) => onChange({ paddingLeft: v })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Btn({
   children,
   onClick,
