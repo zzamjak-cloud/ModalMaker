@@ -12,7 +12,7 @@ import {
 import type { PreviewContext } from "@/features/preview/previewRuntime";
 import type { ThemeTokens } from "@/features/preview/themes";
 import type { NodeHostChildRender, RenderLeafPreviewFn } from "@/nodes/nodeHostTypes";
-import type { ContainerProps, FoldableProps, InputProps, ModuleRefProps } from "@/types/layout";
+import type { ContainerProps, FoldableProps, ModuleRefProps } from "@/types/layout";
 
 export type NodeHostPreviewProps = {
   node: LayoutNode;
@@ -171,74 +171,6 @@ export function NodeHostPreview({
               </Fragment>
             ))
           ))}
-      </PreviewInteractionFrame>
-    );
-  }
-
-  if (node.kind === "input") {
-    const p = node.props as InputProps;
-    const inputBaseStyle: CSSProperties = {
-      borderRadius: 6,
-      border: `1px solid ${theme.inputBorder}`,
-      backgroundColor: theme.inputBg,
-      color: theme.textPrimary,
-      padding: "6px 10px",
-      fontSize: 14,
-      outline: "none",
-      boxSizing: "border-box",
-      minWidth: 0,
-    };
-    const inner =
-      p.inline ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            width: "100%",
-            minWidth: 0,
-          }}
-        >
-          {p.label && (
-            <label
-              style={{
-                fontSize: 14,
-                color: theme.textSecondary,
-                flexShrink: 0,
-                width: `${p.labelWidth ?? 30}%`,
-              }}
-            >
-              {p.label}
-            </label>
-          )}
-          <input
-            type={p.type ?? "text"}
-            placeholder={p.placeholder}
-            defaultValue={p.value}
-            style={{ ...inputBaseStyle, flex: 1 }}
-          />
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%", minWidth: 0 }}>
-          {p.label && (
-            <label style={{ fontSize: 12, color: theme.textSecondary }}>{p.label}</label>
-          )}
-          <input
-            type={p.type ?? "text"}
-            placeholder={p.placeholder}
-            defaultValue={p.value}
-            style={{ ...inputBaseStyle, width: "100%" }}
-          />
-        </div>
-      );
-    return (
-      <PreviewInteractionFrame
-        node={node}
-        ctx={ctx}
-        theme={theme}
-        style={{ ...sizing, ...parentFit }}
-      >
-        {inner}
       </PreviewInteractionFrame>
     );
   }

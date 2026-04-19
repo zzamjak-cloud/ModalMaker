@@ -19,15 +19,19 @@ import { Canvas } from "@/features/canvas/Canvas";
 import { Inspector } from "@/features/inspector/Inspector";
 import { LayerTree } from "@/features/layer-tree/LayerTree";
 import { ModulePanel } from "@/features/modules/ModulePanel";
-import { NodeView } from "@/features/node-view/NodeView";
-import { PresetGallery } from "@/features/presets/PresetGallery";
 import { useLayoutStore, createNode } from "@/stores/layoutStore";
+import { cn } from "@/lib/cn";
+import type { NodeKind } from "@/types/layout";
 
 const PreviewOverlay = lazy(() =>
   import("@/features/preview/PreviewOverlay").then((m) => ({ default: m.PreviewOverlay })),
 );
-import { cn } from "@/lib/cn";
-import type { NodeKind } from "@/types/layout";
+const NodeView = lazy(() =>
+  import("@/features/node-view/NodeView").then((m) => ({ default: m.NodeView })),
+);
+const PresetGallery = lazy(() =>
+  import("@/features/presets/PresetGallery").then((m) => ({ default: m.PresetGallery })),
+);
 
 export default function App() {
   const addNewNode = useLayoutStore((s) => s.addNewNode);
@@ -154,7 +158,16 @@ export default function App() {
                 <PreviewOverlay />
               </Suspense>
             ) : mode === "node" ? (
-              <NodeView />
+              <Suspense
+                fallback={
+                  <div className="flex min-h-0 flex-1 items-center justify-center bg-neutral-950 text-xs text-neutral-500">
+                    <span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-neutral-600 border-t-sky-400" />
+                    노드 뷰 로딩…
+                  </div>
+                }
+              >
+                <NodeView />
+              </Suspense>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
                 <Canvas />
@@ -170,7 +183,17 @@ export default function App() {
           )}
         </div>
 
-        {galleryOpen && <PresetGallery onClose={() => setGalleryOpen(false)} />}
+        {galleryOpen && (
+          <Suspense
+            fallback={
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 text-xs text-neutral-400">
+                프리셋 갤러리 로딩…
+              </div>
+            }
+          >
+            <PresetGallery onClose={() => setGalleryOpen(false)} />
+          </Suspense>
+        )}
       </div>
 
       <DragOverlay dropAnimation={dropAnim}>

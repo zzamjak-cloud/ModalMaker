@@ -7,7 +7,9 @@ export function currentPage(doc: NodeDocument): Page | null {
   return doc.pages.find((p) => p.id === doc.currentPageId) ?? doc.pages[0];
 }
 
-export function activeRoot(state: LayoutState): LayoutNode | null {
+export function activeRoot(
+  state: Pick<LayoutState, "document" | "editingModuleId">,
+): LayoutNode | null {
   if (state.editingModuleId) {
     return state.document.modules.find((m) => m.id === state.editingModuleId)?.root ?? null;
   }

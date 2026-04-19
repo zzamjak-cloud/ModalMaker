@@ -1,6 +1,7 @@
 // 우측 속성 편집기 (Property Panel)
 // 선택된 노드의 kind에 따라 적절한 필드를 표시.
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Package } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
@@ -15,15 +16,29 @@ import type {
 } from "@/types/layout";
 
 export function Inspector() {
-  const root = useLayoutStore((s) => activeRoot(s));
-  const selectedId = useLayoutStore((s) => s.selectedId);
-  const editingModuleId = useLayoutStore((s) => s.editingModuleId);
-  const updateProps = useLayoutStore((s) => s.updateProps);
-  const removeNode = useLayoutStore((s) => s.removeNode);
-  const duplicateNode = useLayoutStore((s) => s.duplicateNode);
-  const registerModule = useLayoutStore((s) => s.registerModule);
-  const selectedIds = useLayoutStore((s) => s.selectedIds);
-  const updatePropsMulti = useLayoutStore((s) => s.updatePropsMulti);
+  const {
+    root,
+    selectedId,
+    editingModuleId,
+    updateProps,
+    removeNode,
+    duplicateNode,
+    registerModule,
+    selectedIds,
+    updatePropsMulti,
+  } = useLayoutStore(
+    useShallow((s) => ({
+      root: activeRoot(s),
+      selectedId: s.selectedId,
+      editingModuleId: s.editingModuleId,
+      updateProps: s.updateProps,
+      removeNode: s.removeNode,
+      duplicateNode: s.duplicateNode,
+      registerModule: s.registerModule,
+      selectedIds: s.selectedIds,
+      updatePropsMulti: s.updatePropsMulti,
+    })),
+  );
 
   const node = useMemo(
     () => (selectedId && root ? findNode(root, selectedId) : null),

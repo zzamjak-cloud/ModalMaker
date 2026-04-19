@@ -1,7 +1,8 @@
 // 상단 툴바 — 두 줄 레이아웃
 // Row 1 (파일·모드·계정 — 전역): 로고, Canvas/Node 토글, New/Save/Save As/Load/프리셋으로 저장, Auth
 // Row 2 (편집·문서 속성 — 현재 문서): Undo/Redo, 제목, Viewport(Canvas 모드), 상태, Export
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   Undo2,
   Redo2,
@@ -29,26 +30,53 @@ import {
 } from "@/stores/layoutStore";
 import type { LayoutDocument, NodeDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
-import { SaveAsDialog } from "./SaveAsDialog";
 import { ViewportSelector } from "./ViewportSelector";
-import { ExportDialog } from "./ExportDialog";
 import { useCanvasViewportControlsStore } from "@/features/canvas/canvasViewportControlsStore";
+
+const SaveAsDialog = lazy(() =>
+  import("./SaveAsDialog").then((m) => ({ default: m.SaveAsDialog })),
+);
+const ExportDialog = lazy(() =>
+  import("./ExportDialog").then((m) => ({ default: m.ExportDialog })),
+);
 
 interface Props {
   onNewClick: () => void;
 }
 
+function ToolbarDialogFallback() {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 text-xs text-neutral-400">
+      다이얼로그 로딩…
+    </div>
+  );
+}
+
 export function Toolbar({ onNewClick }: Props) {
   useGlobalShortcuts();
-  const doc = useLayoutStore((s) => s.document);
-  const canUndo = useLayoutStore((s) => s.past.length > 0);
-  const canRedo = useLayoutStore((s) => s.future.length > 0);
-  const undo = useLayoutStore((s) => s.undo);
-  const redo = useLayoutStore((s) => s.redo);
-  const updateTitle = useLayoutStore((s) => s.updateTitle);
-  const setDocument = useLayoutStore((s) => s.setDocument);
-  const mode = useLayoutStore((s) => s.mode);
-  const setMode = useLayoutStore((s) => s.setMode);
+  const {
+    doc,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    updateTitle,
+    setDocument,
+    mode,
+    setMode,
+  } = useLayoutStore(
+    useShallow((s) => ({
+      doc: s.document,
+      canUndo: s.past.length > 0,
+      canRedo: s.future.length > 0,
+      undo: s.undo,
+      redo: s.redo,
+      updateTitle: s.updateTitle,
+      setDocument: s.setDocument,
+      mode: s.mode,
+      setMode: s.setMode,
+    })),
+  );
   const canvasZoom = useCanvasViewportControlsStore();
 
   const [status, setStatus] = useState<string | null>(null);
@@ -288,26 +316,32 @@ export function Toolbar({ onNewClick }: Props) {
         <LoadDialog docs={savedDocs} onClose={() => setOpenLoad(false)} onLoad={load} />
       )}
       {openSaveAs && (
-        <SaveAsDialog
-          initialTitle={`${doc.title} (사본)`}
-          onCancel={() => setOpenSaveAs(false)}
-          onConfirm={saveAs}
-        />
+        <Suspense fallback={<ToolbarDialogFallback />}>
+          <SaveAsDialog
+            initialTitle={`${doc.title} (사본)`}
+            onCancel={() => setOpenSaveAs(false)}
+            onConfirm={saveAs}
+          />
+        </Suspense>
       )}
       {openSavePreset && (
-        <SaveAsDialog
-          initialTitle={`${currentPage(doc)?.title ?? doc.title} (프리셋)`}
-          onCancel={() => setOpenSavePreset(false)}
-          onConfirm={doSavePreset}
-          label="프리셋 이름"
-        />
+        <Suspense fallback={<ToolbarDialogFallback />}>
+          <SaveAsDialog
+            initialTitle={`${currentPage(doc)?.title ?? doc.title} (프리셋)`}
+            onCancel={() => setOpenSavePreset(false)}
+            onConfirm={doSavePreset}
+            label="프리셋 이름"
+          />
+        </Suspense>
       )}
       {openExport && (
-        <ExportDialog
-          doc={currentPageAsLayoutDoc(doc)}
-          onClose={() => setOpenExport(false)}
-          onFlash={flash}
-        />
+        <Suspense fallback={<ToolbarDialogFallback />}>
+          <ExportDialog
+            doc={currentPageAsLayoutDoc(doc)}
+            onClose={() => setOpenExport(false)}
+            onFlash={flash}
+          />
+        </Suspense>
       )}
     </>
   );

@@ -2,6 +2,7 @@
 // viewport가 설정되어 있으면 해당 해상도의 고정 박스로 표시하고,
 // safeAreaPct로 안쪽 마진(%)을 적용한다. 모듈 편집 중에는 free 뷰포트로 간주.
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useLayoutStore, currentPage, activeRoot } from "@/stores/layoutStore";
 import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 import { NodeRenderer } from "./NodeRenderer";
@@ -16,9 +17,14 @@ function resolveSize(v: ViewportSettings): { width: number; height: number | nul
 }
 
 export function Canvas() {
-  const state = useLayoutStore();
-  const clearMultiSelect = useLayoutStore((s) => s.clearMultiSelect);
-  const select = useLayoutStore((s) => s.select);
+  const { document, editingModuleId, clearMultiSelect, select } = useLayoutStore(
+    useShallow((s) => ({
+      document: s.document,
+      editingModuleId: s.editingModuleId,
+      clearMultiSelect: s.clearMultiSelect,
+      select: s.select,
+    })),
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -30,13 +36,13 @@ export function Canvas() {
     return () => window.removeEventListener("keydown", onKey);
   }, [clearMultiSelect]);
 
-  const root = activeRoot(state);
-  const editingModule = state.editingModuleId
-    ? state.document.modules.find((m) => m.id === state.editingModuleId) ?? null
+  const root = activeRoot({ document, editingModuleId });
+  const editingModule = editingModuleId
+    ? document.modules.find((m) => m.id === editingModuleId) ?? null
     : null;
   const viewport: ViewportSettings = editingModule
     ? { preset: "free" }
-    : currentPage(state.document)?.viewport ?? { preset: "free" };
+    : currentPage(document)?.viewport ?? { preset: "free" };
 
   if (!root) {
     return (
@@ -66,13 +72,13 @@ export function Canvas() {
 
   // 문서/페이지가 바뀌면 반드시 맞춤이 다시 돌아가야 함(해상도 문자열만으로는 Load 후 동일해 보일 수 있음)
   const fitTrigger = [
-    state.document.id,
-    state.document.currentPageId,
+    document.id,
+    document.currentPageId,
     viewport.preset,
     size?.width ?? 0,
     size?.height ?? 0,
     safe,
-    state.editingModuleId ?? "",
+    editingModuleId ?? "",
   ].join("|");
 
   if (!size) {
@@ -86,7 +92,7 @@ export function Canvas() {
       >
         {moduleBadge}
         <CanvasViewport
-          key={`${state.document.id}|free|${state.editingModuleId ?? ""}`}
+          key={`${document.id}|free|${editingModuleId ?? ""}`}
           className="min-h-0 w-full flex-1"
           fitTrigger={fitTrigger}
         >
@@ -108,7 +114,7 @@ export function Canvas() {
     >
       {moduleBadge}
       <CanvasViewport
-        key={`${state.document.id}|fixed|${state.editingModuleId ?? ""}|${size.width}|${size.height ?? "free"}`}
+        key={`${document.id}|fixed|${editingModuleId ?? ""}|${size.width}|${size.height ?? "free"}`}
         className="min-h-0 w-full flex-1"
         contentWidth={size.width}
         contentHeight={heightFree ? undefined : size.height}

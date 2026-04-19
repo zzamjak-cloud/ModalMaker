@@ -7,6 +7,7 @@ import type { ComponentType, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import type { LayoutNode, NodeKind, NodeProps } from "@/types/layout";
 import type { ThemeTokens } from "@/features/preview/themes";
+import type { PreviewContext } from "@/features/preview/previewRuntime";
 
 /** 리프 렌더 컨텍스트 — 호스트(NodeRenderer/PreviewRenderer)가 전달 */
 export interface LeafRenderProps {
@@ -15,6 +16,10 @@ export interface LeafRenderProps {
   mode: "canvas" | "preview";
   /** 프리뷰 테마 토큰 (mode="preview"일 때만 전달) */
   theme?: ThemeTokens;
+  /** 프리뷰 탭 그룹·네비 등 (mode="preview"에서 버튼 등이 사용) */
+  previewCtx?: PreviewContext;
+  /** 프리뷰 상호작용 셸에서 계산된 hover (버튼 밝기 등) */
+  hover?: boolean;
 }
 
 /** Inspector 섹션 컨텍스트 */
