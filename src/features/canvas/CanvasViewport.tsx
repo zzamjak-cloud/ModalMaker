@@ -6,14 +6,14 @@ import {
   registerCanvasViewportControls,
   resetCanvasViewportControls,
 } from "@/features/canvas/canvasViewportControlsStore";
-
-/** 10% 단위(0.1) 스케일, 100% = 1.0 */
-const SCALE_STEP = 0.1;
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 4;
-
-/** 트랙패드 핀치 줌 민감도 — ReactFlow 기본값에 맞춤 */
-const PINCH_SENSITIVITY = 0.008;
+import {
+  SCALE_STEP,
+  MIN_SCALE,
+  MAX_SCALE,
+  PINCH_SENSITIVITY,
+  clamp,
+  snapScale,
+} from "./canvasViewportConsts";
 
 type CanvasViewState = {
   scale: number;
@@ -28,14 +28,6 @@ type CanvasViewportProps = {
   contentHeight?: number | null;
   fitTrigger?: string | number;
 };
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
-
-function snapScale(s: number): number {
-  return clamp(Math.round(s * 10) / 10, MIN_SCALE, MAX_SCALE);
-}
 
 export function CanvasViewport({
   children,
