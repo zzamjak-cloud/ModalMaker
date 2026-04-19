@@ -11,6 +11,39 @@ body,
   margin: 0;
 }
 
+/* 다크 모드 UA 힌트 — 브라우저 기본 스크롤바·폼 위젯이 자동으로 다크 테마로 표시 */
+:root {
+  color-scheme: dark;
+}
+
+/* WebKit 계열(Chromium/Safari) 커스텀 스크롤바 — 다크 테마에 맞춤 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a; /* neutral-800 근처 */
+  border-radius: 6px;
+  border: 2px solid #0a0a0a; /* 트랙과 썸 사이 여백용 트릭 */
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox — 얇은 스크롤바 + 색상 지정 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
 /* 전역 유틸리티: 모노스페이스 패널(Export 미리보기 등) */
 .font-mono-editor {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;

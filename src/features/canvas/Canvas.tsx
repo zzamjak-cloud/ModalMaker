@@ -20,13 +20,12 @@ function resolveSize(v: ViewportSettings): { width: number; height: number | nul
 }
 
 export function Canvas() {
-  const { document, editingModuleId, clearMultiSelect, select, updatePage } = useLayoutStore(
+  const { document, editingModuleId, clearMultiSelect, select } = useLayoutStore(
     useShallow((s) => ({
       document: s.document,
       editingModuleId: s.editingModuleId,
       clearMultiSelect: s.clearMultiSelect,
       select: s.select,
-      updatePage: s.updatePage,
     })),
   );
 
@@ -62,6 +61,7 @@ export function Canvas() {
 
   const exitModuleEdit = useLayoutStore.getState().exitModuleEdit;
 
+  // 상단 바: 좌측은 모듈 편집 배지만(기능 필수), 우측에 줌 컨트롤
   const topBar = (
     <div
       className="flex shrink-0 items-center gap-2 border-b border-neutral-800 bg-neutral-900/70 px-3 py-1.5"
@@ -78,14 +78,6 @@ export function Canvas() {
             완료
           </button>
         </div>
-      ) : page ? (
-        <input
-          value={page.title}
-          onChange={(e) => updatePage(page.id, { title: e.target.value })}
-          className="w-56 rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-neutral-100 focus:border-sky-500 focus:outline-none"
-          placeholder="페이지 제목"
-          title="페이지 제목"
-        />
       ) : null}
       <div className="flex-1" />
       <CanvasZoomControl />
@@ -146,9 +138,6 @@ export function Canvas() {
           className="relative rounded-md bg-neutral-900/50 ring-1 ring-neutral-800"
           style={{ width: size.width, ...(heightFree ? {} : { height: size.height as number }) }}
         >
-          <div className="pointer-events-none absolute -top-6 left-0 select-none text-[10px] uppercase tracking-wider text-neutral-500">
-            {heightFree ? `${size.width}px (높이 자유)` : `${size.width} × ${size.height}`}
-          </div>
           <div
             className={heightFree ? "flex w-full flex-col" : "flex h-full w-full flex-col"}
             style={{ padding: `${safe}%`, boxSizing: "border-box" }}
