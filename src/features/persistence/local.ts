@@ -6,8 +6,11 @@ import { cloneDocumentWithNewIds } from "@/stores/layoutStore";
 import { migrateToV2 } from "@/lib/migrate";
 import type { LayoutDocument, NodeDocument } from "@/types/layout";
 
+// idb-keyval의 createStore는 같은 DB 이름으로 두 번 호출하면 version 1로 먼저 만들어진
+// store만 존재해 이후 다른 store 접근 시 "object store not found" 에러를 낸다.
+// → DB 이름을 분리해 각자 독립 관리한다.
 const DOC_STORE = createStore("modalmaker-db", "documents");
-const PRESET_STORE = createStore("modalmaker-db", "userPresets");
+const PRESET_STORE = createStore("modalmaker-presets-db", "userPresets");
 
 export interface PersistenceAdapter {
   listDocuments(): Promise<NodeDocument[]>;
