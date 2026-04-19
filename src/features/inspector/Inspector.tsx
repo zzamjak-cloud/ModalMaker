@@ -9,6 +9,7 @@ import { FlexChildSection } from "./FlexChildSection";
 import { IconPicker } from "./IconPicker";
 import { InteractionSection } from "./InteractionSection";
 import { ColorPicker } from "./ColorPicker";
+import { getDescriptor } from "@/nodes/registry";
 import type {
   ButtonProps,
   CheckboxProps,
@@ -21,7 +22,6 @@ import type {
   NodeProps,
   ProgressProps,
   SplitProps,
-  TextProps,
 } from "@/types/layout";
 
 export function Inspector() {
@@ -161,6 +161,18 @@ function KindFields({
   node: LayoutNode;
   onChange: (patch: Record<string, unknown>) => void;
 }) {
+  // registry에 Inspector가 등록된 kind는 descriptor 경로 우선 사용 (점진 이관)
+  const desc = getDescriptor(node.kind);
+  if (desc?.Inspector) {
+    const InspectorSection = desc.Inspector;
+    return (
+      <InspectorSection
+        node={node}
+        props={node.props as never}
+        onChange={onChange as never}
+      />
+    );
+  }
   switch (node.kind) {
     case "container": {
       const p = node.props as ContainerProps;
@@ -319,44 +331,6 @@ function KindFields({
           </Field>
           <Field label="Open">
             <Toggle value={p.open ?? true} onChange={(v) => onChange({ open: v })} />
-          </Field>
-        </>
-      );
-    }
-    case "text": {
-      const p = node.props as TextProps;
-      return (
-        <>
-          <Field label="Text">
-            <TextArea value={p.text} onChange={(v) => onChange({ text: v })} />
-          </Field>
-          <Field label="Size">
-            <Select
-              value={p.size ?? "md"}
-              options={["sm", "md", "lg", "xl", "2xl"]}
-              onChange={(v) => onChange({ size: v })}
-            />
-          </Field>
-          <Field label="Weight">
-            <Select
-              value={p.weight ?? "normal"}
-              options={["normal", "medium", "bold"]}
-              onChange={(v) => onChange({ weight: v })}
-            />
-          </Field>
-          <Field label="Align">
-            <SegmentedControl
-              value={p.align ?? "left"}
-              options={[
-                { value: "left", label: "←" },
-                { value: "center", label: "가운데" },
-                { value: "right", label: "→" },
-              ]}
-              onChange={(v) => onChange({ align: v })}
-            />
-          </Field>
-          <Field label="Color">
-            <ColorPicker value={p.color ?? ""} onChange={(v) => onChange({ color: v || undefined })} allowEmpty />
           </Field>
         </>
       );
@@ -725,17 +699,6 @@ function TextInput({ value, onChange }: { value: string; onChange: (v: string) =
     <input
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
-    />
-  );
-}
-
-function TextArea({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      rows={3}
       className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-sky-500 focus:outline-none"
     />
   );

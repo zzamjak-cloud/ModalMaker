@@ -4,6 +4,7 @@ import { getLucideIcon } from "@/features/canvas/lucideLookup";
 import { applySizing } from "@/features/canvas/applySizing";
 import { applyParentFit, type ParentFlexDirection } from "@/lib/layoutSizing";
 import { useLayoutStore } from "@/stores/layoutStore";
+import { getDescriptor } from "@/nodes/registry";
 import { useTheme } from "./ThemeContext";
 import {
   hasDisabledBehavior,
@@ -22,7 +23,6 @@ import type {
   ModuleRefProps,
   ProgressProps,
   SplitProps,
-  TextProps,
 } from "@/types/layout";
 
 function containerLayoutStyle(p: ContainerProps): React.CSSProperties {
@@ -270,17 +270,13 @@ export function PreviewRenderer({
 
   // leaf nodes
   const leaf = (() => {
+    // registry에 Leaf가 등록된 kind는 descriptor 경로 우선 사용 (점진 이관)
+    const desc = getDescriptor(node.kind);
+    if (desc?.Leaf) {
+      const Leaf = desc.Leaf;
+      return <Leaf node={node} mode="preview" theme={t} />;
+    }
     switch (node.kind) {
-      case "text": {
-        const p = node.props as TextProps;
-        const fontSize = { sm: 12, md: 14, lg: 16, xl: 18, "2xl": 24 }[p.size ?? "md"];
-        const fontWeight = { normal: 400, medium: 500, bold: 700 }[p.weight ?? "normal"];
-        return (
-          <span style={{ fontSize, fontWeight, color: p.color ?? t.textPrimary, textAlign: p.align ?? "left", display: "block" }}>
-            {p.text || "Text"}
-          </span>
-        );
-      }
       case "button": {
         const p = node.props as ButtonProps;
         // 탭 그룹: 활성/비활성 상태에 따라 effective variant 결정

@@ -5,8 +5,12 @@
 //     - [Text: Logo]
 //     - [Button: Login]
 import type { LayoutDocument, LayoutNode } from "@/types/layout";
+import { getDescriptor } from "@/nodes/registry";
 
 function nodeLine(node: LayoutNode): string {
+  // registry에 exportMarkdown이 등록된 kind는 descriptor 경로 우선 사용 (점진 이관)
+  const desc = getDescriptor(node.kind);
+  if (desc?.exportMarkdown) return desc.exportMarkdown(node);
   switch (node.kind) {
     case "container": {
       const p = node.props as { label?: string; direction?: string; columns?: number };
