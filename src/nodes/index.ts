@@ -8,6 +8,9 @@ import "./icon";
 import "./progress";
 import "./checkbox";
 import "./split";
+import "./input";
+import "./button";
+import "./foldable";
 
 // 레지스트리 API 재노출
 export * from "./registry";

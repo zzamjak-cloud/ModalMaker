@@ -6,15 +6,12 @@ import { cn } from "@/lib/cn";
 import { useLayoutStore, activeRoot } from "@/stores/layoutStore";
 import { SizeSection } from "./SizeSection";
 import { FlexChildSection } from "./FlexChildSection";
-import { IconPicker } from "./IconPicker";
 import { InteractionSection } from "./InteractionSection";
 import { ColorPicker } from "./ColorPicker";
 import { getDescriptor } from "@/nodes/registry";
 import type {
   ButtonProps,
   ContainerProps,
-  FoldableProps,
-  InputProps,
   LayoutNode,
   ModuleRefProps,
   NodeProps,
@@ -318,132 +315,6 @@ function KindFields({
         </>
       );
     }
-    case "foldable": {
-      const p = node.props as FoldableProps;
-      return (
-        <>
-          <Field label="Title">
-            <TextInput value={p.title} onChange={(v) => onChange({ title: v })} />
-          </Field>
-          <Field label="Open">
-            <Toggle value={p.open ?? true} onChange={(v) => onChange({ open: v })} />
-          </Field>
-        </>
-      );
-    }
-    case "button": {
-      const p = node.props as ButtonProps;
-      return (
-        <>
-          <Field label="Label">
-            <TextInput value={p.label} onChange={(v) => onChange({ label: v })} />
-          </Field>
-          <Field label="Variant">
-            <Select
-              value={p.variant ?? "primary"}
-              options={["primary", "secondary", "destructive", "ghost", "plain"]}
-              onChange={(v) => onChange({ variant: v })}
-            />
-          </Field>
-          <Field label="Size">
-            <Select
-              value={p.size ?? "md"}
-              options={["sm", "md", "lg"]}
-              onChange={(v) => onChange({ size: v })}
-            />
-          </Field>
-          <Field label="Icon">
-            <IconPicker value={p.iconName} onChange={(v) => onChange({ iconName: v || undefined })} />
-          </Field>
-          {p.iconName && (
-            <Field label="Icon Position">
-              <SegmentedControl
-                value={p.iconPosition ?? "left"}
-                options={[
-                  { value: "left", label: "왼쪽" },
-                  { value: "right", label: "오른쪽" },
-                ]}
-                onChange={(v) => onChange({ iconPosition: v })}
-              />
-            </Field>
-          )}
-          <Field label="Content Align">
-            <SegmentedControl
-              value={p.contentAlign ?? "center"}
-              options={[
-                { value: "left", label: "←" },
-                { value: "center", label: "가운데" },
-                { value: "right", label: "→" },
-              ]}
-              onChange={(v) => onChange({ contentAlign: v })}
-            />
-          </Field>
-          <Field label="탭 그룹 ID">
-            <TextInput
-              value={p.tabGroupId ?? ""}
-              onChange={(v) => onChange({ tabGroupId: v || undefined })}
-            />
-          </Field>
-          {p.tabGroupId && (
-            <>
-              <Field label="기본 활성">
-                <Toggle
-                  value={p.tabDefaultActive ?? false}
-                  onChange={(v) => onChange({ tabDefaultActive: v })}
-                />
-              </Field>
-              <Field label="비활성 스타일">
-                <Select
-                  value={p.tabInactiveVariant ?? "ghost"}
-                  options={["primary", "secondary", "destructive", "ghost", "plain"]}
-                  onChange={(v) => onChange({ tabInactiveVariant: v })}
-                />
-              </Field>
-            </>
-          )}
-        </>
-      );
-    }
-    case "input": {
-      const p = node.props as InputProps;
-      return (
-        <>
-          <Field label="Layout">
-            <SegmentedControl
-              value={p.inline ? "inline" : "stack"}
-              options={[
-                { value: "stack", label: "2줄" },
-                { value: "inline", label: "1줄" },
-              ]}
-              onChange={(v) => onChange({ inline: v === "inline" })}
-            />
-          </Field>
-          <Field label="Label">
-            <TextInput value={p.label ?? ""} onChange={(v) => onChange({ label: v })} />
-          </Field>
-          {p.inline && (
-            <Field label="Label 비율 (%)">
-              <NumberInput
-                value={p.labelWidth ?? 30}
-                min={10}
-                max={70}
-                onChange={(v) => onChange({ labelWidth: v })}
-              />
-            </Field>
-          )}
-          <Field label="Placeholder">
-            <TextInput value={p.placeholder ?? ""} onChange={(v) => onChange({ placeholder: v })} />
-          </Field>
-          <Field label="Type">
-            <Select
-              value={p.type ?? "text"}
-              options={["text", "email", "password", "number"]}
-              onChange={(v) => onChange({ type: v })}
-            />
-          </Field>
-        </>
-      );
-    }
     case "module-ref": {
       return <ModuleRefFields node={node} />;
     }
@@ -685,26 +556,6 @@ function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
-  );
-}
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!value)}
-      className={cn(
-        "relative inline-flex h-5 w-9 items-center rounded-full border transition",
-        value ? "border-sky-500 bg-sky-500" : "border-neutral-700 bg-neutral-800",
-      )}
-    >
-      <span
-        className={cn(
-          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
-          value ? "translate-x-4" : "translate-x-0.5",
-        )}
-      />
-    </button>
   );
 }
 
