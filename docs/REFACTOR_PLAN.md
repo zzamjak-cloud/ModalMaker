@@ -1,217 +1,225 @@
 # ModalMaker 성능 최적화 & 리팩토링 계획
 
-> 기준: 2026-04-19, `main` @ `fab7568`
-> 규모: 58개 TS/TSX, 약 8,900 LOC, 번들 ~1.84MB(gzip 432KB)
+> 최초 작성: 2026-04-19, `main` @ `fab7568`
+> 최종 갱신: 2026-04-19, `main` @ `aa4a21d` — Phase 1~5 대부분 완료
 > 목표: **노드 타입·인터렉션·프리셋 확장이 쉬워지도록 구조화**하고, 복잡도 증가가 성능 붕괴로 이어지지 않게 기반을 강화한다.
 
 ---
 
-## 1. 현재 구조 진단
+## 0. 완료 요약 (스냅샷)
 
-### 코드 집중 영역 (LOC 상위)
+| 지표 | Before (fab7568) | After (aa4a21d) | 변화 |
+|---|---|---|---|
+| `Inspector.tsx` LOC | 872 | 225 | **-74%** |
+| `layoutStore.ts` LOC | 858 | 222 (+ slice 7개 총 748) | 관심사 분리 |
+| `NodeRenderer.tsx` LOC | 431 | 50 | **-88%** |
+| `PreviewRenderer.tsx` LOC | 404 | 64 | **-84%** |
+| 초기 JS 청크 | 1,843KB / gzip 432KB | 1,613KB / gzip 361KB | **-12% / -17%** |
+| 청크 분할 | 1개 | 7개 (NodeView·Preview·Presets·Export·SaveAs·presetRegistry 등 lazy) | ✅ |
+| 신규 kind 추가 비용 | 8~10 파일 수정 | `src/nodes/<kind>/` 1개 디렉토리 | **O(n)→O(1)** |
+
+**Phase 1** (노드 레지스트리) ✅ 완료 — 10/10 kind, `NodeDescriptor` 정착
+**Phase 2** (렌더러 통합) ✅ 완료 — `NodeHost`/`NodeHostCanvas`/`NodeHostPreview` + `CanvasAdorners`/`PreviewAdorners`
+**Phase 3** (Store 분할, 옵션 A) ✅ 완료 — `stores/layout/` 슬라이스(`document`/`selection`/`history`/`ui` + `graph`/`commit`/`cloneTree`)
+**Phase 4** (성능 최적화) ✅ 주요 완료 — `useShallow` 확산, lazy chunk 6개, button/input Leaf 이관, CanvasViewport RO 통합
+**Phase 5** (폴더 재편) ✅ 부분 — `features/editor/{toolbar,palette,inspector,layer-tree}` 통합
+
+---
+
+## 1. 잔존 리팩토링 이슈 (Phase 6 이후 대상)
+
+### 1-1. 여전히 큰 파일 (최대 LOC 상위)
+
 | 파일 | LOC | 문제 |
 |---|---|---|
-| `features/editor/inspector/Inspector.tsx` | 872 | kind별 섹션이 한 파일에 몰려 있음 — 노드 추가 시 이 파일이 부풀어 오름 |
-| `stores/layoutStore.ts` | 858 | 문서/선택/히스토리/모듈/프리뷰/뷰포트 액션이 한 스토어에 혼재 |
-| `features/presets/presetRegistry.ts` | 615 | 프리셋 빌더 전부 집중, v1/v2 마이그레이션 로직 섞임 |
-| `features/canvas/NodeRenderer.tsx` | 431 | `switch (node.kind)` 중심, 모듈-ref·컨테이너·리프 분기 섞임 |
-| `features/preview/PreviewRenderer.tsx` | 404 | NodeRenderer와 60~70% 로직 중복 (컨테이너 처리·리프 switch) |
-| `features/canvas/CanvasViewport.tsx` | 455 | fit/reveal/RO 재시도 로직 복잡 — useLayoutEffect 4개, ref 10개 |
+| `features/presets/presetRegistry.ts` | 615 | 15개 프리셋 빌더가 한 파일에 집중, `doc()` 헬퍼·마이그레이션 로직 혼재 |
+| `stores/layout/documentSlice.ts` | 459 | 노드·페이지·모듈·엣지 뮤테이션이 한 `buildDocumentSlice`에 집중 |
+| `features/editor/toolbar/Toolbar.tsx` | 453 | 본체 + `LoadDialog` + `ToolbarButton` + 유틸이 한 파일에 — `LoadDialog`(200 LOC) 분리 가능 |
+| `features/canvas/CanvasViewport.tsx` | 448 | fit/reveal/RO 재시도 로직 복잡 — `useRef` 28개 통계, 4개 `useLayoutEffect` |
+| `features/preview/PreviewOverlay.tsx` | 337 | `ViewportFrame`/`PopupViewportFrame`/테마 선택기/탭 active map 초기화가 한 파일 |
 
-### 구조적 부채
-1. **노드 타입 추가 비용이 O(n)** — 새 kind 하나 추가 시 수정 필요한 파일:
-   - `types/layout.ts` (Props 인터페이스 + NodeProps union + NodeKind)
-   - `NodeRenderer.tsx` (renderLeaf switch case)
-   - `PreviewRenderer.tsx` (leaf IIFE case + 가끔 최상위 분기)
-   - `Inspector.tsx` (kind별 섹션)
-   - `Palette.tsx` (팔레트 아이템)
-   - `LayerTree.tsx` (nodeLabel + 아이콘)
-   - `export/toMarkdown.ts`·`toMermaid.ts` (직렬화)
-   - `presets/presetRegistry.ts` (디폴트 props)
-   - 총 **8~10개 파일** 동시 수정
+### 1-2. 성능
 
-2. **Canvas ↔ Preview 렌더러 중복** — container/foldable/module-ref 분기·sizing 처리·flex 부모 전달이 거의 동일하나 각자 구현. Canvas에만 있거나 Preview에만 있는 치우친 동작(인터렉션·드래그·인라인 편집) 때문에 통합 실패한 상태.
+1. **React.memo 미적용** — `NodeHost` 계열은 `memo()` 미사용. 대형 문서(200+ 노드)에서 하나의 props 변경이 전체 트리 재렌더를 유발할 가능성.
+2. **`useLayoutStore(selector)` 최적화 범위 불균일** — 63회 사용 중 다수는 이미 세분 selector이지만 일부 컴포넌트는 여전히 큰 객체 구독.
+3. **Immer produce 오버헤드** — 대형 문서에서 매 뮤테이션마다 전체 `document` draft. 일부 핫패스(매 키 입력으로 발생하는 `updateProps`)는 patch 기반 최적화 가능.
+4. **`NodeView`의 ReactFlow 노드 매핑** — `useNodesState`/`useEdgesState` 연동부가 변경 횟수만큼 `setNodes` 호출. 많은 페이지일 때 프로파일 필요.
 
-3. **거대 Store** — `set((s) => commit(s, draft => ...))` 패턴은 일관되지만, selection / history / preview / module-edit / viewport 등 관심사가 한 곳에 섞여 수정 시 영향범위가 넓다. 훅 단위로 분리가 가능한데 통째로 구독하는 컴포넌트가 존재.
+### 1-3. 확장성
 
-4. **번들 분할 없음** — 1.84MB 단일 청크. `@xyflow/react`, `lucide-react` 아이콘 전체, Firebase, Export 다이얼로그 등이 항상 로드됨.
+1. **`NodeKind` union 수동 유지** — `types/layout.ts`의 `NodeKind` 타입은 여전히 문자열 union. 레지스트리에 자동 등록되지만 타입은 중복 선언 필요.
+2. **`NodeProps` union** — 동일 문제. 새 kind 추가 시 `NodeProps` union에 추가해야 TypeScript가 props 판별.
+3. **LayerTree의 kind 분기** — 아이콘/라벨 일부가 아직 `switch`로 남아 있을 수 있음(커밋 기록상 layerLabel descriptor는 있으나 소비부 확인 필요).
+4. **인터렉션 액션 확장 구조** — `InteractionAction` union에 새 액션(스크롤·데이터 바인딩·애니메이션) 추가 시 Inspector/런타임 두 곳 수정.
 
-5. **재렌더 가드 없음** — NodeRenderer·PreviewRenderer·TextLeaf·ButtonLeaf 어느 것도 `React.memo` 미적용. 루트 document 변경 시 전체 트리 재구성.
+### 1-4. 테스트/관측성
+
+1. **테스트 인프라 부재** — 단위/통합 테스트 없음. 회귀 검증은 수동 시나리오에 의존. 마이그레이션 로직(`migrateToV2`)·commit snapshot 로직은 특히 위험.
+2. **런타임 관측성 부재** — `console.warn`/`console.error`만 존재. 프로덕션에서 사용자 환경 버그 추적 수단 없음.
+
+### 1-5. 타입 시스템
+
+1. **`as never` 캐스트 잔존** — `Inspector.tsx`에서 `descriptor.Inspector` 호출 시 `as never`로 prop 타입 우회.
+2. **`Record<string, unknown>` 의존** — `onChange` 콜백이 타입 안전하지 않은 경로가 일부 남아 있음.
 
 ---
 
-## 2. 단계별 계획 (우선순위순)
+## 2. Phase 6: 남은 거대 파일 분해 (저위험)
 
-### Phase 1: 노드 타입 레지스트리 (최우선, 확장성 근본 해결)
+### 6-1. `toolbar/Toolbar.tsx` 분리 — 0.5일
+- `LoadDialog` → `features/editor/toolbar/LoadDialog.tsx`
+- `SaveAsDialog`는 이미 별도 파일
+- `currentPageAsLayoutDoc`/`readableError` → `toolbar/toolbarUtils.ts`
+- `ToolbarButton` → `toolbar/ToolbarButton.tsx`
+- 목표: `Toolbar.tsx` 453 → ~200 LOC
 
-> **가장 먼저 해야 할 이유**: 앞으로 추가될 노드 타입(예: Tab, Slider, Dropdown, Image, Code block…)마다 8~10개 파일을 건드리는 비용이 눈덩이처럼 커진다. 레지스트리 도입 후에는 1개 모듈 = 1개 노드 타입.
-
-#### 목표 구조
+### 6-2. `stores/layout/documentSlice.ts` 세분화 — 1일
+현재 하나의 `buildDocumentSlice`에 **20+ 액션**이 집중. 논리적 그룹으로 분할:
 
 ```
-src/nodes/
-├── registry.ts              # 모든 NodeDescriptor를 등록. NodeKind → NodeDescriptor.
-├── types.ts                 # NodeDescriptor 인터페이스
-├── text/
-│   ├── index.ts             # register({ kind: "text", ...descriptor })
-│   ├── TextLeaf.tsx         # 캔버스/프리뷰 공용 렌더러 (props: node, mode)
-│   ├── TextInspector.tsx    # kind별 Inspector 섹션
-│   ├── textExport.ts        # Markdown/Mermaid 직렬화
-│   └── defaults.ts          # createDefaultProps()
-├── button/ ...
-├── input/ ...
-└── (각 kind별 디렉토리)
+stores/layout/
+├── documentSlice.ts        # 기존 파일을 아래로 분해 후 import/compose
+├── nodeActions.ts          # addNode/addNewNode/moveNode/updateProps/patchNode/removeNode/duplicateNode
+├── pageActions.ts          # addPage/removePage/updatePage/setCurrentPage/movePage/duplicatePage
+├── moduleActions.ts        # registerModule/unlinkModule/updateModule/removeModule/enterModuleEdit/exitModuleEdit
+├── edgeActions.ts          # addEdge/removeEdge
+└── interactionActions.ts   # addInteraction/updateInteraction/removeInteraction
 ```
 
-#### NodeDescriptor 인터페이스 (초안)
+각 액션 그룹은 `{ set, get, deps }`를 받아 `Pick<LayoutState, ...>`를 반환. `buildDocumentSlice`는 단순 합성자(`spread`).
 
+### 6-3. `canvas/CanvasViewport.tsx` 훅 추출 — 1일
+복잡한 ref/effect 로직을 커스텀 훅으로 분리:
+
+```
+features/canvas/
+├── CanvasViewport.tsx          # UI + 이벤트 바인딩 (목표 ~150 LOC)
+├── hooks/
+│   ├── useFitTransform.ts      # fit()·scale·pan·revealAfterStable
+│   ├── useContainerSize.ts     # ResizeObserver + measured 관리
+│   └── usePointerPanZoom.ts    # wheel/trackpad/pinch/gesture 핸들러
+```
+
+리스크: 훅 경계를 잘못 그으면 기존 엣지 케이스(로드 직후 맞춤·모듈 편집 종료·`custom-w` free height) 회귀. 통합 전 수동 시나리오 체크리스트 필수.
+
+### 6-4. `presets/presetRegistry.ts` 카테고리 분리 — 0.5일
+
+```
+features/presets/
+├── presetRegistry.ts           # BUILTIN_PRESETS export + 헬퍼만
+├── builders/
+│   ├── doc.ts                  # doc()/text()/button() 등 빌더 헬퍼
+│   ├── layouts.ts              # 5개 Layout 프리셋 (Row/Column/Grid/...)
+│   └── modals.ts               # 10개 모달 프리셋 (Form/Confirm/...)
+```
+
+### 6-5. `preview/PreviewOverlay.tsx` 뷰포트 프레임 분리 — 0.5일
+- `ViewportFrame`·`PopupViewportFrame` → `preview/ViewportFrame.tsx`
+- `ThemePicker` → `preview/ThemePicker.tsx`
+- `initTabActiveMap` → `preview/previewRuntime.ts`
+- `PreviewOverlay.tsx` 337 → ~180 LOC
+
+---
+
+## 3. Phase 7: 성능 2차 패스 (중위험)
+
+### 7-1. `NodeHost`에 `React.memo` 적용 — 0.5일
 ```ts
-interface NodeDescriptor<P = NodeProps> {
-  kind: NodeKind;
-  label: string;                              // 팔레트·레이어 트리 표기
-  icon: LucideIcon;
-  isContainer: boolean;
-  paletteCategory?: "layout" | "input" | "display" | "misc";
-  defaultProps: () => P;
-  renderLeaf: (ctx: RenderCtx<P>) => React.ReactNode;    // 캔버스·프리뷰 공용
-  renderInspector: (ctx: InspectorCtx<P>) => React.ReactNode;
-  exportMarkdown?: (node: LayoutNode, children: string) => string;
-  exportMermaid?: (node: LayoutNode) => string;
-  layerLabel?: (node: LayoutNode) => string;  // LayerTree 표기 커스터마이즈
-}
+export const NodeHost = memo(NodeHostImpl, (prev, next) => {
+  // Immer는 변경되지 않은 서브트리의 LayoutNode 참조를 유지하므로
+  // node 참조 + mode + 선택 상태가 동일하면 재렌더 생략 가능.
+  return prev.node === next.node
+    && prev.mode === next.mode
+    && prev.depth === next.depth
+    && prev.parentDirection === next.parentDirection;
+});
 ```
+- **측정 전후 필수**: 200 노드 문서에서 Input 1자 입력 시 렌더 컴포넌트 수를 React Devtools Profiler로 비교.
 
-`RenderCtx`에 `mode: "canvas" | "preview"`·사이즈 스타일·테마 토큰·인터렉션 핸들러를 주입해, 한 컴포넌트가 두 모드를 모두 처리.
+### 7-2. Hot mutation 최적화
+- `updateProps`는 텍스트 입력마다 호출 → 매번 `produce` + 전체 `commit` snapshot.
+- 연속 입력은 **debounced snapshot**으로 그룹핑 (예: 타이핑 종료 후 500ms, 또는 blur 시점에만 snapshot).
+- 저장된 히스토리 엔트리가 "K-K-Ka-Kat-Kate-Katie" 6개 → 1개로 축소.
 
-#### 이관 순서
-1. `types.ts` + `registry.ts` 신설 (비어 있어도 OK)
-2. 가장 단순한 kind부터: `text` → `icon` → `progress` → `checkbox` → `split` → `input` → `button`
-3. 각 이관 시 NodeRenderer/PreviewRenderer/Inspector/export의 해당 case를 레지스트리 호출로 치환
-4. 마지막으로 컨테이너계(`container`, `foldable`, `module-ref`) — 자식 재귀 훅을 레지스트리에서 호출하도록 구성
-5. 이관 완료 후 `Inspector.tsx`는 "선택된 노드의 descriptor.renderInspector 호출 + 공용 섹션(Size·Interaction·Layout)"만 남김 → 예상 200~300 LOC로 축소
+### 7-3. `LayerTree` 가상화
+- 큰 문서에서 깊은 트리 렌더 비용 측정 후 필요 시 `react-window` 또는 수동 가상화.
+- 현재는 우선순위 낮음 (500+ 노드 이전엔 영향 미미).
 
-**가드레일**: 각 kind 이관 후 수동 시나리오(팔레트에서 드래그, 프리뷰 표시, 레이어 트리, Export, 저장/로드) 점검.
-
----
-
-### Phase 2: Canvas/Preview 렌더러 통합 (Phase 1 위에서 자연스럽게)
-
-Phase 1의 `renderLeaf(ctx)`가 `mode` 인자를 받으면, NodeRenderer와 PreviewRenderer는 **공통 프레임**(선택 outline, drop zone, 인터렉션)만 자신의 모드로 덧씌우고 내부는 공용 렌더러로 위임.
-
-#### 제안 구조
-```
-src/nodes/
-├── NodeHost.tsx              # 재귀 본체. mode별 가드(선택·DnD·드래그·핸들러)
-├── renderers/
-│   ├── CanvasAdorners.tsx    # ResizeHandles, outline, DropZone 주입
-│   └── PreviewAdorners.tsx   # hover/press/disabled state style, onClick 핸들러 주입
-```
-
-NodeRenderer / PreviewRenderer는 얇은 래퍼로 축소 (~50 LOC). 중복 60% 제거 목표.
+### 7-4. `lucide-react` 트리셰이킹 확인
+- 이미 named import 쓰지만 실제 번들에 몇 개 아이콘이 들어가는지 `vite-plugin-analyzer`로 측정.
+- `IconPicker`가 전체 lucide를 참조한다면 동적 import로 지연.
 
 ---
 
-### Phase 3: Store 분할 (관심사 분리)
+## 4. Phase 8: 확장성·타입 강화 (중위험)
 
-단일 `useLayoutStore` → 아래 슬라이스로 분할 (Zustand의 `slices` 패턴 또는 여러 store로):
+### 8-1. `NodeKind` / `NodeProps` 타입의 단일 진실 원천화
+- 현재: `types/layout.ts`에 수동 union + `src/nodes/*/index.ts`에 register().
+- 목표: **레지스트리 자체**가 타입 유도의 원천이 되도록 — `nodes/registry.ts`에서 `type NodeKind = keyof typeof RegistryMap` 형태로.
+- 제약: register는 런타임 동적이므로 **컴파일타임 타입 유도에는 map 객체가 필요**. kind별 type assertion 대신 `declare module` 형태의 확장 시스템 도입.
 
-| 슬라이스 | 책임 |
-|---|---|
-| `documentStore` | `document`, `addNode`, `updateProps`, `updateViewport`, `moveNode` … 문서 변형 전용 |
-| `selectionStore` | `selectedId`, `selectedIds`, `select`, `toggleSelectMulti`, `clearMultiSelect` |
-| `historyStore` | `past`, `future`, `undo`, `redo`, `commit` — documentStore의 snapshot을 구독 |
-| `uiStore` | `mode`, `editingModuleId`, `enterModuleEdit`, `leftTab` … 편집 UI 상태 |
-| `previewStore` | 프리뷰 상태(탭 active map, 페이지 history) — 프리뷰 오버레이가 단독 소유 |
+### 8-2. 인터렉션 액션 레지스트리
+- `InteractionAction` union을 `InteractionActionDescriptor` 레지스트리로 분해.
+- Inspector 편집 UI·`runActions` 실행 구현을 한 모듈에서 짝지어 등록.
+- 새 액션 추가 시 한 곳만 수정.
 
-**이득**
-- 컴포넌트가 필요한 슬라이스만 구독 → 불필요 재렌더 감소.
-- 테스트·확장 단위가 명확해짐(히스토리 로직을 변경해도 뮤테이션 코드 영향 없음).
-
----
-
-### Phase 4: 성능 최적화 (Phase 1·2 기반 위에서)
-
-#### 4-1. 메모이제이션
-- `NodeHost`는 `React.memo`로 감싸고 `arePropsEqual`로 **node 참조 변경 + mode**만 체크.
-- Immer 덕분에 자식이 바뀌지 않은 노드는 참조 유지 → `React.memo`가 대규모 트리에서 잘 동작.
-- 컨테이너의 `containerStyle`·`applySizing` 결과를 `useMemo`로 고정(현재는 매 렌더 재계산).
-
-#### 4-2. Store 선택자 세분화
-- 현재 Canvas.tsx는 `useLayoutStore()`로 전체 state 구독 → 어떤 키가 바뀌어도 재렌더. 필요한 키만 shallow compare로:
-  ```ts
-  const { root, viewport } = useLayoutStore(useShallow(s => ({
-    root: activeRoot(s),
-    viewport: currentPage(s.document)?.viewport,
-  })));
-  ```
-- 비슷한 패턴을 Toolbar·Inspector·PreviewOverlay에도 적용.
-
-#### 4-3. 번들 코드 스플릿
-- `PreviewOverlay` — 동적 import로 분리 (프리뷰 진입 시에만 로드)
-- `PresetGallery`·`ExportDialog`·`SaveAsDialog` — 각각 모달 진입 시 lazy
-- `@xyflow/react` — 노드 뷰 진입 시 lazy
-- `lucide-react` — `iconLookup`은 이미 lazy 패턴이 있으면 유지, 없으면 동적 import로 전환
-- 목표: 초기 청크 800KB 이하(gzip 220KB 이하)
-
-#### 4-4. 재연산 핫스팟 정리
-- `CanvasViewport`의 fit/reveal 로직 단순화 후 ref 개수 감소 (현재 10여 개 → 4~5개).
-- RO + useLayoutEffect 중복 관찰(현재 3개) 통합.
-
-#### 4-5. 측정 전략
-- `npm run build` 번들 크기 비교를 매 PR 체크포인트로 기록.
-- `performance.mark`로 대형 문서(200+ 노드) 편집 시 Input one-char 입력 → commit → 재렌더 시간 측정.
-- React Devtools Profiler로 메모이제이션 전/후 renders 수 비교.
+### 8-3. 테마 토큰 스키마 명문화
+- `ThemeTokens`에 `accent`·`surface`·`text`·`border`·`input`·`button` 카테고리 그룹화.
+- `ThemeContext`에서 runtime 검증 1회(개발 모드).
 
 ---
 
-### Phase 5: 폴더 구조 정리 (리팩토링 마무리)
+## 5. Phase 9: 테스트 인프라 (고 가치, 시작 비용 있음)
 
-Phase 1~4가 끝나면 현재의 기능 중심(`features/canvas`, `features/preview`)과 새 도메인 중심(`nodes/*`)이 섞여 있게 된다. 아래로 재편:
+### 9-1. Vitest 도입 — 0.5일
+- 단위 테스트: `lib/id`, `lib/layoutSizing`, `lib/migrate`, `stores/layout/cloneTree`, `graph` 함수.
+- 리듀서 계열: `stores/layout/documentSlice` 각 액션을 초기 상태→기대 상태로 검증.
 
-```
-src/
-├── app/                    # App.tsx, 전역 레이아웃
-├── core/                   # types, lib/id, lib/cn, lib/layoutSizing — 도메인 비의존
-├── stores/                 # 분할된 slices
-├── nodes/                  # Phase 1 결과 — 노드 타입별 모듈
-├── features/
-│   ├── editor/             # palette, layer-tree, inspector, toolbar (→ `features/editor/*`로 일부 반영됨)
-│   ├── canvas/             # Canvas, CanvasViewport, DnD, ResizeHandles
-│   ├── node-view/
-│   ├── preview/
-│   ├── export/
-│   ├── presets/
-│   ├── persistence/        # local, remote, migrate
-│   └── auth/
-└── index.css, main.tsx
-```
+### 9-2. Component 테스트 — 1일
+- `@testing-library/react`로 `NodeHostCanvas` + `TextLeaf`/`ButtonLeaf` 조합 스냅샷.
+- 레지스트리 초기화는 테스트 setup에서 1회.
+
+### 9-3. 마이그레이션 골든 테스트 — 0.5일
+- v1 JSON fixture → `migrateToV2` → 기대 v2 snapshot. 향후 스키마 변경 회귀 방지.
 
 ---
 
-## 3. 로드맵 요약
+## 6. Phase 10: 관측성 (장기)
 
-| Phase | 이득 | 위험 | 공수(대략) |
-|---|---|---|---|
-| **1. 노드 레지스트리** | 신규 노드 추가 비용 O(n)→O(1), 파일별 분할로 리뷰 쉬움 | kind별 이관 중 회귀 가능 → kind 단위로 PR | 3~5일 |
-| **2. 렌더러 통합** | NodeRenderer/PreviewRenderer 중복 60% 제거 | canvas 전용(DnD·선택)·preview 전용(state style) 섞임 주의 | 2일 |
-| **3. Store 분할** | 컴포넌트 구독 최소화, 관심사 분리 | Undo/Redo가 여러 슬라이스를 spans → history 설계 신중히 | 2~3일 |
-| **4. 성능 최적화** | 초기 로드 절반, 대형 문서 재렌더 1/5 목표 | 메모 비교 누락 시 stale UI 버그 | 2~3일 |
-| **5. 폴더 재편** | 신규 기여자 진입 장벽 ↓ | git blame 유실(한 번의 rename PR로 최소화) | 0.5일 |
-
-총 **10~14일**의 단일 담당자 공수. 각 Phase는 독립 PR로 분리하고, Phase 1은 `kind` 단위로 다시 쪼개 기능 브랜치(`refactor/nodes-registry-text`, `-button`…) 순차 머지.
+- `console.error` 대신 중앙 로거(`lib/logger.ts`) 사용. 프로덕션은 no-op, 개발은 포맷팅.
+- Firebase 환경이면 **Firestore write 실패/읽기 실패**를 자동 수집 버킷에 기록(옵션).
+- UI에는 "저장 실패 시 재시도" 토스트 UX 통일.
 
 ---
 
-## 4. 착수 직전 체크리스트
+## 7. 우선순위 로드맵
 
-- [ ] 현 상태에서 수동 회귀 시나리오 스크립트화 (저장/로드, 팔레트→드롭, 모듈 등록/편집, 프리뷰, Export 4종)
-- [ ] 번들 크기 베이스라인 기록 (`dist/assets/*.js` 현재 1,843KB 기록)
-- [ ] 렌더 시간 베이스라인 (200 노드 문서에서 Input 타이핑 FPS)
-- [ ] `feature/refactor-nodes-registry-foundation` 브랜치 생성 후 Phase 1 시작
+| Phase | 가치 | 위험 | 공수 | 순서 |
+|---|---|---|---|---|
+| **6** 거대 파일 분해 | ★★★ | 낮음 | 3일 | 1 |
+| **7-1** React.memo + 측정 | ★★★ | 낮음 | 0.5일 | 2 |
+| **7-2** Debounced snapshot | ★★★ | 중간 | 1일 | 3 |
+| **9-1/9-3** Vitest + migration test | ★★★ | 낮음 | 1일 | 4 |
+| **9-2** Component test | ★★ | 낮음 | 1일 | 5 |
+| **8-1/8-2** 레지스트리 타입 강화 | ★★ | 중간 | 2일 | 6 |
+| **6-3** CanvasViewport 훅 추출 | ★★ | 중간 | 1일 | 7 |
+| **7-4** Icon 트리셰이킹 분석 | ★ | 낮음 | 0.5일 | 8 |
+| **10** 관측성 | ★★ | 낮음 | 1일 | 후순위 |
 
-## 5. 의도적 제외 (현재 범위 밖)
+합계 **~11일** — Phase 6과 7-1/7-2/9-1을 우선 묶어 **첫 번째 PR 5일치** 작업으로 정의하면 체감 개선이 크다.
 
-- **Firestore 스키마 변경**: 현 v2 유지, 레지스트리는 직렬화 포맷 동일.
-- **테스트 인프라 도입**: 테스트 프레임워크(Vitest 등) 도입은 별도 프로젝트 — 현재는 수동 시나리오 유지.
-- **국제화**: 한국어 UI·주석은 그대로.
-- **새 기능**: 리팩토링 중에는 기능 추가 보류. 버그 핫픽스만 허용.
+---
+
+## 8. 의도적 제외
+
+- **원격 실시간 협업** (multi-cursor / CRDT): 단일 사용자 도구 전제 유지.
+- **UI 국제화**: 한국어 UI 그대로.
+- **새 기능**: Phase 6~10 동안 기능 추가 금지, 핫픽스만 허용.
+- **Tauri 네이티브 배포**: Phase 10 이후 고려.
+
+---
+
+## 변경 이력
+
+- 2026-04-19 초안 — Phase 1~5 목표 및 단계 설정.
+- 2026-04-19 갱신 — Phase 1~5 완료 표시, Phase 6~10 추가.
