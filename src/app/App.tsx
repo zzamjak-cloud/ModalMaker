@@ -1,7 +1,7 @@
 // ModalMaker 앱 최상위 셸
 // - DndContext가 팔레트와 캔버스를 동시에 감싸야 팔레트 → 캔버스 드래그가 성립한다.
 // - 좌측 사이드바는 Palette(상단) + LayerTree/ModulePanel 탭(하단), 사이에 수직 리사이저 존재.
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -21,8 +21,11 @@ import { LayerTree } from "@/features/layer-tree/LayerTree";
 import { ModulePanel } from "@/features/modules/ModulePanel";
 import { NodeView } from "@/features/node-view/NodeView";
 import { PresetGallery } from "@/features/presets/PresetGallery";
-import { PreviewOverlay } from "@/features/preview/PreviewOverlay";
 import { useLayoutStore, createNode } from "@/stores/layoutStore";
+
+const PreviewOverlay = lazy(() =>
+  import("@/features/preview/PreviewOverlay").then((m) => ({ default: m.PreviewOverlay })),
+);
 import { cn } from "@/lib/cn";
 import type { NodeKind } from "@/types/layout";
 
@@ -140,7 +143,16 @@ export default function App() {
           {/* 중앙: 캔버스 / 노드 뷰 / 프리뷰 */}
           <main className="flex min-h-0 flex-1 overflow-hidden bg-neutral-950">
             {mode === "preview" ? (
-              <PreviewOverlay />
+              <Suspense
+                fallback={
+                  <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-neutral-950 text-xs text-neutral-500">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-neutral-600 border-t-sky-400" />
+                    프리뷰 준비 중…
+                  </div>
+                }
+              >
+                <PreviewOverlay />
+              </Suspense>
             ) : mode === "node" ? (
               <NodeView />
             ) : (
