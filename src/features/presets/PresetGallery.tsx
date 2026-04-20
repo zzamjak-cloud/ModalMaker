@@ -15,6 +15,12 @@ import { BUILTIN_PRESETS, PRESET_CATEGORIES, type PresetCategory, type PresetEnt
 import { currentAdapter } from "@/features/persistence";
 import type { LayoutDocument } from "@/types/layout";
 import { newId } from "@/lib/id";
+import { NodeRenderer } from "@/features/canvas/NodeRenderer";
+import { resolveThumbFit } from "@/features/canvas/thumbnailUtils";
+
+/** 프리셋 카드 썸네일 최대 크기 */
+const PRESET_THUMB_MAX_W = 260;
+const PRESET_THUMB_MAX_H = 130;
 
 type TabKey = "All" | PresetCategory | "My Presets";
 
@@ -187,13 +193,38 @@ function TabBtn({
 }
 
 function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => void }) {
+  const firstPage = entry.document.pages[0];
+  const thumb = firstPage ? resolveThumbFit(firstPage.viewport, PRESET_THUMB_MAX_W, PRESET_THUMB_MAX_H) : null;
   return (
     <button
       onClick={onClick}
       className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.25)]"
     >
-      <div className="flex flex-1 items-center justify-center bg-gradient-to-br from-neutral-900 to-neutral-950 text-5xl">
-        {entry.icon}
+      <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
+        {firstPage && thumb ? (
+          <div
+            className="relative overflow-hidden rounded-sm"
+            style={{ width: thumb.frameW, height: thumb.frameH }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: thumb.contentW,
+                height: thumb.contentH,
+                transformOrigin: "top left",
+                transform: `scale(${thumb.scale})`,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <NodeRenderer node={firstPage.root} depth={0} parentIsFlexContainer parentDirection="column" />
+            </div>
+          </div>
+        ) : (
+          <div className="text-5xl">{entry.icon}</div>
+        )}
       </div>
       <div className="border-t border-neutral-800 px-3 py-2">
         <div className="flex items-center justify-between">
@@ -232,7 +263,7 @@ function UserPresetCard({
         onClick={onClick}
         className="flex flex-1 flex-col text-left"
       >
-        <div className="flex flex-1 items-center justify-center text-4xl text-neutral-600">📋</div>
+        <UserPresetThumb doc={doc} />
         <div className="border-t border-neutral-800 px-3 py-2">
           <div className="text-sm font-medium text-neutral-100">{doc.title}</div>
           <div className="mt-0.5 text-xs text-neutral-500">
@@ -240,6 +271,34 @@ function UserPresetCard({
           </div>
         </div>
       </button>
+    </div>
+  );
+}
+
+function UserPresetThumb({ doc }: { doc: LayoutDocument }) {
+  const thumb = resolveThumbFit(doc.viewport, PRESET_THUMB_MAX_W, PRESET_THUMB_MAX_H);
+  return (
+    <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
+      <div
+        className="relative overflow-hidden rounded-sm"
+        style={{ width: thumb.frameW, height: thumb.frameH }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: thumb.contentW,
+            height: thumb.contentH,
+            transformOrigin: "top left",
+            transform: `scale(${thumb.scale})`,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <NodeRenderer node={doc.root} depth={0} parentIsFlexContainer parentDirection="column" />
+        </div>
+      </div>
     </div>
   );
 }

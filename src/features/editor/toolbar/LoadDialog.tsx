@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { NodeRenderer } from "@/features/canvas/NodeRenderer";
+import { resolveThumbFit } from "@/features/canvas/thumbnailUtils";
 import { currentPage } from "@/stores/layoutStore";
 import type { NodeDocument } from "@/types/layout";
 
@@ -25,6 +26,9 @@ import type { NodeDocument } from "@/types/layout";
 const GRID_COLS = 3;
 /** 페이지당 카드 수 — 추후 사용자 설정 가능하게 확장 */
 const PAGE_SIZE = 9;
+/** 썸네일 영역 최대 크기 (px) — 카드 내부 */
+const THUMB_MAX_W = 240;
+const THUMB_MAX_H = 120;
 
 // ============================================================
 // 그룹 구조 — 추후 문서 메타에 group 필드 도입 시 여기만 확장
@@ -384,6 +388,7 @@ function DocCard({
   registerRef: (el: HTMLDivElement | null) => void;
 }) {
   const page = currentPage(doc);
+  const thumb = page ? resolveThumbFit(page.viewport, THUMB_MAX_W, THUMB_MAX_H) : null;
   return (
     <div
       ref={registerRef}
@@ -398,11 +403,28 @@ function DocCard({
         type="button"
         onClick={onLoad}
         disabled={editing}
-        className="pointer-events-auto flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2 text-left"
+        className="pointer-events-auto flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2"
       >
-        {page ? (
-          <div className="pointer-events-none origin-top-left" style={{ transform: "scale(0.22)", width: `${100 / 0.22}%`, height: `${100 / 0.22}%` }}>
-            <NodeRenderer node={page.root} depth={0} />
+        {page && thumb ? (
+          <div
+            className="pointer-events-none relative overflow-hidden rounded-sm"
+            style={{ width: thumb.frameW, height: thumb.frameH }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: thumb.contentW,
+                height: thumb.contentH,
+                transformOrigin: "top left",
+                transform: `scale(${thumb.scale})`,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <NodeRenderer node={page.root} depth={0} parentIsFlexContainer parentDirection="column" />
+            </div>
           </div>
         ) : (
           <div className="text-4xl text-neutral-600">📋</div>
