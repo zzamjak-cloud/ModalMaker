@@ -26,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/layoutStore";
 import { useGlobalShortcuts } from "@/lib/history";
 import { currentAdapter } from "@/features/persistence";
+import { pushRecent, removeRecent } from "@/features/persistence/recentStore";
 import { firebaseEnabled } from "@/lib/firebase";
 import { useAuthStore } from "@/features/auth/authStore";
 import {
@@ -154,6 +155,7 @@ export function Toolbar({ onNewClick }: Props) {
   async function save() {
     try {
       await currentAdapter().saveDocument(doc);
+      pushRecent(doc.id);
       flash(`저장됨: ${doc.title}`);
     } catch (err) {
       logger.error("persistence", "Save failed", err);
@@ -165,6 +167,7 @@ export function Toolbar({ onNewClick }: Props) {
     const copy = cloneDocumentWithNewIds(doc, newTitle);
     try {
       await currentAdapter().saveDocument(copy);
+      pushRecent(copy.id);
       setDocument(copy);
       flash(`새 파일로 저장됨: ${newTitle}`);
     } catch (err) {
@@ -217,6 +220,7 @@ export function Toolbar({ onNewClick }: Props) {
 
   function load(d: NodeDocument) {
     setDocument(d);
+    pushRecent(d.id);
     setOpenLoad(false);
   }
 
@@ -239,6 +243,7 @@ export function Toolbar({ onNewClick }: Props) {
     const target = savedDocs.find((d) => d.id === id);
     try {
       await currentAdapter().deleteDocument(id);
+      removeRecent(id);
       setSavedDocs((prev) => prev.filter((d) => d.id !== id));
       flash(target ? `삭제됨: ${target.title}` : "문서 삭제됨");
     } catch (err) {

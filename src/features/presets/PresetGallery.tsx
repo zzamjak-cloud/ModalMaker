@@ -1,84 +1,150 @@
-// 프리셋 갤러리 모달
-// - 카테고리 탭 (전체/카테고리별/내 프리셋)
-// - 그리드에서 선택 시 layoutStore.setDocument로 캔버스에 로드 (ID 재발급)
-// - 빈 상태에서 시작하려면 "Blank Canvas" 선택
+// 최초 진입 다이얼로그 (PresetGallery) — 3탭 구조
+// [최근 사용] [저장된] [프리셋]
+//  - 최근:   localStorage에 저장된 id를 IDB에서 로드해 썸네일 그리드
+//  - 저장된: currentAdapter.listDocuments() 썸네일 그리드
+//  - 프리셋: 내장 프리셋(카테고리 서브탭) + 내 프리셋 + 빈 캔버스
 import { useEffect, useMemo, useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   useLayoutStore,
   cloneDocumentWithNewIds,
   cloneWithNewIds,
   createEmptyDocument,
+  currentPage as getCurrentPage,
 } from "@/stores/layoutStore";
-import { BUILTIN_PRESETS, PRESET_CATEGORIES, type PresetCategory, type PresetEntry } from "./presetRegistry";
+import {
+  BUILTIN_PRESETS,
+  PRESET_CATEGORIES,
+  type PresetCategory,
+  type PresetEntry,
+} from "./presetRegistry";
 import { currentAdapter } from "@/features/persistence";
-import type { LayoutDocument } from "@/types/layout";
-import { newId } from "@/lib/id";
+import { getRecentIds, pushRecent } from "@/features/persistence/recentStore";
 import { NodeRenderer } from "@/features/canvas/NodeRenderer";
 import { resolveThumbFit } from "@/features/canvas/thumbnailUtils";
+import { logger } from "@/lib/logger";
+import type { LayoutDocument, NodeDocument } from "@/types/layout";
+import { newId } from "@/lib/id";
 
-/** 프리셋 카드 썸네일 최대 크기 */
-const PRESET_THUMB_MAX_W = 260;
-const PRESET_THUMB_MAX_H = 130;
+type TopTab = "recent" | "saved" | "presets";
+type PresetSubTab = "All" | PresetCategory | "My Presets";
 
-type TabKey = "All" | PresetCategory | "My Presets";
+/** 그리드 카드 썸네일 최대 */
+const CARD_THUMB_W = 260;
+const CARD_THUMB_H = 130;
 
 export function PresetGallery({ onClose }: { onClose: () => void }) {
   const setDocument = useLayoutStore((s) => s.setDocument);
-  const [tab, setTab] = useState<TabKey>("All");
+
+  const [topTab, setTopTab] = useState<TopTab>("recent");
+  const [presetSubTab, setPresetSubTab] = useState<PresetSubTab>("All");
+
+  // 최근 / 저장된 데이터 로딩
+  const [recentDocs, setRecentDocs] = useState<NodeDocument[]>([]);
+  const [savedDocs, setSavedDocs] = useState<NodeDocument[]>([]);
   const [userPresets, setUserPresets] = useState<LayoutDocument[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<LayoutDocument | null>(null);
+  const [loading, setLoading] = useState<{ recent: boolean; saved: boolean }>({
+    recent: true,
+    saved: true,
+  });
 
   useEffect(() => {
-    currentAdapter().listUserPresets().then(setUserPresets);
-  }, [tab]);
+    // 최근: id 목록을 유지 순서대로 IDB 조회 (null은 정리)
+    (async () => {
+      const ids = getRecentIds();
+      if (ids.length === 0) {
+        setRecentDocs([]);
+        setLoading((p) => ({ ...p, recent: false }));
+        return;
+      }
+      const results = await Promise.all(
+        ids.map((id) => currentAdapter().loadDocument(id).catch(() => null)),
+      );
+      setRecentDocs(results.filter((d): d is NodeDocument => !!d));
+      setLoading((p) => ({ ...p, recent: false }));
+    })();
+  }, []);
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    const id = deleteTarget.id;
-    await currentAdapter().deleteUserPreset(id);
-    setUserPresets((prev) => prev.filter((p) => p.id !== id));
-    setDeleteTarget(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const docs = await currentAdapter().listDocuments();
+        setSavedDocs(docs);
+      } catch (err) {
+        logger.error("persistence", "listDocuments failed", err);
+      }
+      setLoading((p) => ({ ...p, saved: false }));
+    })();
+  }, []);
+
+  useEffect(() => {
+    currentAdapter()
+      .listUserPresets()
+      .then(setUserPresets)
+      .catch((err) => logger.error("presets", "listUserPresets failed", err));
+  }, []);
+
+  // 최초 로드 후 빈 탭은 자연스러운 탭으로 이동
+  useEffect(() => {
+    if (loading.recent || loading.saved) return;
+    if (topTab === "recent" && recentDocs.length === 0) {
+      setTopTab(savedDocs.length > 0 ? "saved" : "presets");
+    }
+  }, [loading, recentDocs.length, savedDocs.length, topTab]);
+
+  const visiblePresets = useMemo(() => {
+    if (presetSubTab === "All") return BUILTIN_PRESETS;
+    if (presetSubTab === "My Presets") return [];
+    return BUILTIN_PRESETS.filter((p) => p.category === presetSubTab);
+  }, [presetSubTab]);
+
+  function loadNodeDoc(d: NodeDocument) {
+    setDocument(d);
+    pushRecent(d.id);
+    onClose();
   }
 
-  const visible = useMemo(() => {
-    if (tab === "All") return BUILTIN_PRESETS;
-    if (tab === "My Presets") return [];
-    return BUILTIN_PRESETS.filter((p) => p.category === tab);
-  }, [tab]);
-
   function loadPreset(entry: PresetEntry) {
-    // v2 NodeDocument → 전체 페이지/모듈/엣지 id를 한 번에 재매핑해 다중 로드 충돌 방지
     const cloned = cloneDocumentWithNewIds(entry.document, entry.document.title);
     setDocument(cloned);
+    pushRecent(cloned.id);
     onClose();
   }
 
   function loadUserPreset(d: LayoutDocument) {
-    // 사용자 프리셋은 여전히 v1 구조로 저장됨. setDocument가 자동으로 v2 마이그레이션 수행.
-    setDocument({
+    const next = {
       ...d,
       id: newId("doc"),
       root: cloneWithNewIds(d.root),
       updatedAt: Date.now(),
-    });
+    };
+    setDocument(next);
+    pushRecent(next.id);
     onClose();
   }
 
   function blank() {
-    setDocument(createEmptyDocument("Untitled"));
+    const empty = createEmptyDocument("Untitled");
+    setDocument(empty);
+    pushRecent(empty.id);
     onClose();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="flex h-[80vh] w-[min(1100px,92vw)] flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl">
-        {/* Header */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-[82vh] w-[min(1100px,94vw)] flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-neutral-800 px-5 py-3">
           <div>
-            <div className="text-xs uppercase tracking-wider text-neutral-500">Preset Gallery</div>
-            <div className="text-lg font-semibold">시작할 모달을 선택하세요</div>
+            <div className="text-xs uppercase tracking-wider text-neutral-500">Start</div>
+            <div className="text-lg font-semibold">시작할 문서를 선택하세요</div>
           </div>
           <button
             onClick={onClose}
@@ -88,89 +154,104 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Tabs */}
+        {/* 최상위 3탭 */}
         <div className="flex gap-1 border-b border-neutral-800 px-3 py-2">
-          <TabBtn active={tab === "All"} onClick={() => setTab("All")}>
-            All
-          </TabBtn>
-          {PRESET_CATEGORIES.map((c) => (
-            <TabBtn key={c} active={tab === c} onClick={() => setTab(c)}>
-              {c}
-            </TabBtn>
-          ))}
-          <TabBtn active={tab === "My Presets"} onClick={() => setTab("My Presets")}>
-            내 프리셋 ({userPresets.length})
-          </TabBtn>
+          <TopTabBtn active={topTab === "recent"} onClick={() => setTopTab("recent")}>
+            최근 ({recentDocs.length})
+          </TopTabBtn>
+          <TopTabBtn active={topTab === "saved"} onClick={() => setTopTab("saved")}>
+            저장된 문서 ({savedDocs.length})
+          </TopTabBtn>
+          <TopTabBtn active={topTab === "presets"} onClick={() => setTopTab("presets")}>
+            프리셋
+          </TopTabBtn>
         </div>
 
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {/* 빈 캔버스 카드 - All 탭에만 표시 */}
-            {tab === "All" && (
-              <button
-                onClick={blank}
-                className="group flex h-44 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-neutral-700 bg-neutral-900/40 text-neutral-400 transition hover:border-sky-500/60 hover:text-sky-300"
+        {/* 프리셋 탭 내부 서브탭 */}
+        {topTab === "presets" && (
+          <div className="flex flex-wrap gap-1 border-b border-neutral-800 px-3 py-2">
+            <SubTabBtn active={presetSubTab === "All"} onClick={() => setPresetSubTab("All")}>
+              All
+            </SubTabBtn>
+            {PRESET_CATEGORIES.map((c) => (
+              <SubTabBtn
+                key={c}
+                active={presetSubTab === c}
+                onClick={() => setPresetSubTab(c)}
               >
-                <Plus size={24} />
-                <div className="text-sm font-medium">빈 캔버스</div>
-                <div className="text-[11px] text-neutral-500 group-hover:text-sky-400/70">
-                  처음부터 직접 구성
-                </div>
-              </button>
-            )}
-
-            {tab === "My Presets"
-              ? userPresets.map((p) => (
-                  <UserPresetCard
-                    key={p.id}
-                    doc={p}
-                    onClick={() => loadUserPreset(p)}
-                    onDelete={() => setDeleteTarget(p)}
-                  />
-                ))
-              : visible.map((p) => <PresetCard key={p.id} entry={p} onClick={() => loadPreset(p)} />)}
-
-            {tab === "My Presets" && userPresets.length === 0 && (
-              <div className="col-span-full text-center text-sm text-neutral-500">
-                저장된 내 프리셋이 없습니다. 캔버스에서 작업 후 <strong>툴바 ▸ 프리셋으로 저장</strong>을 사용하세요.
-              </div>
-            )}
+                {c}
+              </SubTabBtn>
+            ))}
+            <SubTabBtn
+              active={presetSubTab === "My Presets"}
+              onClick={() => setPresetSubTab("My Presets")}
+            >
+              내 프리셋 ({userPresets.length})
+            </SubTabBtn>
           </div>
+        )}
+
+        {/* 컨텐츠 */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {topTab === "recent" && (
+            <DocGrid
+              docs={recentDocs}
+              loading={loading.recent}
+              emptyMsg="최근 사용한 문서가 없습니다. '저장된 문서' 또는 '프리셋'에서 시작하세요."
+              onPick={loadNodeDoc}
+            />
+          )}
+
+          {topTab === "saved" && (
+            <DocGrid
+              docs={savedDocs}
+              loading={loading.saved}
+              emptyMsg="저장된 문서가 없습니다."
+              onPick={loadNodeDoc}
+            />
+          )}
+
+          {topTab === "presets" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {presetSubTab === "All" && (
+                <button
+                  onClick={blank}
+                  className="group flex h-44 flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-neutral-700 bg-neutral-900/40 text-neutral-400 transition hover:border-sky-500/60 hover:text-sky-300"
+                >
+                  <Plus size={24} />
+                  <div className="text-sm font-medium">빈 캔버스</div>
+                  <div className="text-[11px] text-neutral-500 group-hover:text-sky-400/70">
+                    처음부터 직접 구성
+                  </div>
+                </button>
+              )}
+
+              {presetSubTab === "My Presets"
+                ? userPresets.map((p) => (
+                    <UserPresetCard key={p.id} doc={p} onClick={() => loadUserPreset(p)} />
+                  ))
+                : visiblePresets.map((p) => (
+                    <PresetCard key={p.id} entry={p} onClick={() => loadPreset(p)} />
+                  ))}
+
+              {presetSubTab === "My Presets" && userPresets.length === 0 && (
+                <div className="col-span-full text-center text-sm text-neutral-500">
+                  저장된 내 프리셋이 없습니다. 캔버스에서 작업 후{" "}
+                  <strong>File ▸ Save to Preset</strong>을 사용하세요.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-      {deleteTarget && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
-          <div className="w-[min(400px,92vw)] rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl">
-            <div className="border-b border-neutral-800 px-4 py-3 text-sm font-semibold text-neutral-100">
-              프리셋 삭제
-            </div>
-            <div className="px-4 py-4 text-sm text-neutral-300">
-              <strong className="text-neutral-100">"{deleteTarget.title}"</strong>을 삭제하시겠습니까?
-              <div className="mt-1 text-xs text-neutral-500">되돌릴 수 없습니다.</div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-neutral-800 px-4 py-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-              >
-                취소
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="rounded-md border border-rose-700 bg-rose-600/20 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-600/30"
-              >
-                삭제
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function TabBtn({
+// ============================================================
+// 탭 버튼
+// ============================================================
+function TopTabBtn({
   active,
   onClick,
   children,
@@ -183,8 +264,10 @@ function TabBtn({
     <button
       onClick={onClick}
       className={cn(
-        "rounded-md px-3 py-1.5 text-sm transition",
-        active ? "bg-sky-500/20 text-sky-200" : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200",
+        "rounded-md px-4 py-2 text-sm font-medium transition",
+        active
+          ? "bg-sky-500/20 text-sky-200"
+          : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200",
       )}
     >
       {children}
@@ -192,9 +275,117 @@ function TabBtn({
   );
 }
 
+function SubTabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-md px-2.5 py-1 text-xs transition",
+        active
+          ? "bg-sky-500/15 text-sky-200"
+          : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ============================================================
+// 문서 썸네일 그리드 (최근·저장된 공용)
+// ============================================================
+function DocGrid({
+  docs,
+  loading,
+  emptyMsg,
+  onPick,
+}: {
+  docs: NodeDocument[];
+  loading: boolean;
+  emptyMsg: string;
+  onPick: (d: NodeDocument) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-neutral-500">
+        불러오는 중…
+      </div>
+    );
+  }
+  if (docs.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-center text-sm text-neutral-500">
+        {emptyMsg}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {docs.map((d) => (
+        <DocCard key={d.id} doc={d} onClick={() => onPick(d)} />
+      ))}
+    </div>
+  );
+}
+
+function DocCard({ doc, onClick }: { doc: NodeDocument; onClick: () => void }) {
+  const page = getCurrentPage(doc);
+  const thumb = page ? resolveThumbFit(page.viewport, CARD_THUMB_W, CARD_THUMB_H) : null;
+  return (
+    <button
+      onClick={onClick}
+      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.25)]"
+    >
+      <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2">
+        {page && thumb ? (
+          <div
+            className="relative overflow-hidden rounded-sm"
+            style={{ width: thumb.frameW, height: thumb.frameH }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: thumb.contentW,
+                height: thumb.contentH,
+                transformOrigin: "top left",
+                transform: `scale(${thumb.scale})`,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <NodeRenderer node={page.root} depth={0} parentIsFlexContainer parentDirection="column" />
+            </div>
+          </div>
+        ) : (
+          <div className="text-4xl text-neutral-600">📄</div>
+        )}
+      </div>
+      <div className="border-t border-neutral-800 px-3 py-2">
+        <div className="truncate text-sm font-medium text-neutral-100">{doc.title}</div>
+        <div className="mt-0.5 text-[11px] text-neutral-500">
+          {new Date(doc.updatedAt).toLocaleString("ko-KR")}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ============================================================
+// 프리셋 카드
+// ============================================================
 function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => void }) {
   const firstPage = entry.document.pages[0];
-  const thumb = firstPage ? resolveThumbFit(firstPage.viewport, PRESET_THUMB_MAX_W, PRESET_THUMB_MAX_H) : null;
+  const thumb = firstPage ? resolveThumbFit(firstPage.viewport, CARD_THUMB_W, CARD_THUMB_H) : null;
   return (
     <button
       onClick={onClick}
@@ -228,8 +419,8 @@ function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => voi
       </div>
       <div className="border-t border-neutral-800 px-3 py-2">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-neutral-100">{entry.name}</div>
-          <div className="rounded-sm bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-400">
+          <div className="truncate text-sm font-medium text-neutral-100">{entry.name}</div>
+          <div className="shrink-0 rounded-sm bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-400">
             {entry.category}
           </div>
         </div>
@@ -239,66 +430,41 @@ function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => voi
   );
 }
 
-function UserPresetCard({
-  doc,
-  onClick,
-  onDelete,
-}: {
-  doc: LayoutDocument;
-  onClick: () => void;
-  onDelete: () => void;
-}) {
+function UserPresetCard({ doc, onClick }: { doc: LayoutDocument; onClick: () => void }) {
+  const thumb = resolveThumbFit(doc.viewport, CARD_THUMB_W, CARD_THUMB_H);
   return (
-    <div className="group relative flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="absolute right-2 top-2 z-10 rounded-md border border-neutral-800 bg-neutral-950/80 p-1.5 text-neutral-400 opacity-0 transition hover:border-rose-700 hover:bg-rose-950/60 hover:text-rose-200 group-hover:opacity-100"
-        title="프리셋 삭제"
-      >
-        <Trash2 size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex flex-1 flex-col text-left"
-      >
-        <UserPresetThumb doc={doc} />
-        <div className="border-t border-neutral-800 px-3 py-2">
-          <div className="text-sm font-medium text-neutral-100">{doc.title}</div>
-          <div className="mt-0.5 text-xs text-neutral-500">
-            {new Date(doc.updatedAt).toLocaleString("ko-KR")}
+    <button
+      onClick={onClick}
+      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60"
+    >
+      <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
+        <div
+          className="relative overflow-hidden rounded-sm"
+          style={{ width: thumb.frameW, height: thumb.frameH }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: thumb.contentW,
+              height: thumb.contentH,
+              transformOrigin: "top left",
+              transform: `scale(${thumb.scale})`,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <NodeRenderer node={doc.root} depth={0} parentIsFlexContainer parentDirection="column" />
           </div>
         </div>
-      </button>
-    </div>
-  );
-}
-
-function UserPresetThumb({ doc }: { doc: LayoutDocument }) {
-  const thumb = resolveThumbFit(doc.viewport, PRESET_THUMB_MAX_W, PRESET_THUMB_MAX_H);
-  return (
-    <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
-      <div
-        className="relative overflow-hidden rounded-sm"
-        style={{ width: thumb.frameW, height: thumb.frameH }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: thumb.contentW,
-            height: thumb.contentH,
-            transformOrigin: "top left",
-            transform: `scale(${thumb.scale})`,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <NodeRenderer node={doc.root} depth={0} parentIsFlexContainer parentDirection="column" />
+      </div>
+      <div className="border-t border-neutral-800 px-3 py-2">
+        <div className="truncate text-sm font-medium text-neutral-100">{doc.title}</div>
+        <div className="mt-0.5 text-[11px] text-neutral-500">
+          {new Date(doc.updatedAt).toLocaleString("ko-KR")}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
