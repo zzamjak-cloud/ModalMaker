@@ -3,7 +3,7 @@
 //  - 최근:   localStorage에 저장된 id를 IDB에서 로드해 썸네일 그리드
 //  - 저장된: currentAdapter.listDocuments() 썸네일 그리드
 //  - 프리셋: 내장 프리셋(카테고리 서브탭) + 내 프리셋 + 빈 캔버스
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
@@ -48,11 +48,15 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
     recent: true,
     saved: true,
   });
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // 첫 로드 완료 시점에 자동 탭 이동을 1회만 적용 — 이후 사용자 탭 클릭을 덮어쓰지 않음
+  const didAutoSwitchRef = useRef(false);
 
   useEffect(() => {
     // 최근: id 목록을 유지 순서대로 IDB 조회 (null은 정리)
     (async () => {
       const ids = getRecentIds();
+      logger.info("presets", `recent ids count=${ids.length}`);
       if (ids.length === 0) {
         setRecentDocs([]);
         setLoading((p) => ({ ...p, recent: false }));
@@ -61,7 +65,9 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
       const results = await Promise.all(
         ids.map((id) => currentAdapter().loadDocument(id).catch(() => null)),
       );
-      setRecentDocs(results.filter((d): d is NodeDocument => !!d));
+      const docs = results.filter((d): d is NodeDocument => !!d);
+      logger.info("presets", `recent loaded=${docs.length}/${ids.length}`);
+      setRecentDocs(docs);
       setLoading((p) => ({ ...p, recent: false }));
     })();
   }, []);
@@ -70,9 +76,11 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
     (async () => {
       try {
         const docs = await currentAdapter().listDocuments();
+        logger.info("presets", `listDocuments returned ${docs.length} docs`);
         setSavedDocs(docs);
       } catch (err) {
         logger.error("persistence", "listDocuments failed", err);
+        setLoadError(err instanceof Error ? err.message : String(err));
       }
       setLoading((p) => ({ ...p, saved: false }));
     })();
@@ -85,13 +93,16 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
       .catch((err) => logger.error("presets", "listUserPresets failed", err));
   }, []);
 
-  // 최초 로드 후 빈 탭은 자연스러운 탭으로 이동
+  // 최초 로드 완료 후 빈 탭이면 자동으로 다른 탭으로 1회만 이동.
+  // 이후 사용자가 '최근'을 다시 클릭하면 그대로 유지.
   useEffect(() => {
+    if (didAutoSwitchRef.current) return;
     if (loading.recent || loading.saved) return;
-    if (topTab === "recent" && recentDocs.length === 0) {
+    didAutoSwitchRef.current = true;
+    if (recentDocs.length === 0) {
       setTopTab(savedDocs.length > 0 ? "saved" : "presets");
     }
-  }, [loading, recentDocs.length, savedDocs.length, topTab]);
+  }, [loading.recent, loading.saved, recentDocs.length, savedDocs.length]);
 
   const visiblePresets = useMemo(() => {
     if (presetSubTab === "All") return BUILTIN_PRESETS;
@@ -197,6 +208,7 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
             <DocGrid
               docs={recentDocs}
               loading={loading.recent}
+              error={null}
               emptyMsg="최근 사용한 문서가 없습니다. '저장된 문서' 또는 '프리셋'에서 시작하세요."
               onPick={loadNodeDoc}
             />
@@ -206,7 +218,8 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
             <DocGrid
               docs={savedDocs}
               loading={loading.saved}
-              emptyMsg="저장된 문서가 없습니다."
+              error={loadError}
+              emptyMsg="저장된 문서가 없습니다. 먼저 문서를 편집하고 File ▸ Save로 저장하세요."
               onPick={loadNodeDoc}
             />
           )}
@@ -305,11 +318,13 @@ function SubTabBtn({
 function DocGrid({
   docs,
   loading,
+  error,
   emptyMsg,
   onPick,
 }: {
   docs: NodeDocument[];
   loading: boolean;
+  error: string | null;
   emptyMsg: string;
   onPick: (d: NodeDocument) => void;
 }) {
@@ -317,6 +332,17 @@ function DocGrid({
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
         불러오는 중…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-rose-300">
+        <div>문서 목록을 불러오지 못했습니다.</div>
+        <div className="text-xs text-rose-400/80">{error}</div>
+        <div className="mt-2 text-[11px] text-neutral-500">
+          브라우저 DevTools → Console에서 [persistence] 로그를 확인하세요.
+        </div>
       </div>
     );
   }
