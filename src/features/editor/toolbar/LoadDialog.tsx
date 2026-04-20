@@ -398,12 +398,23 @@ function DocCard({
         selected ? "border-sky-500 shadow-[0_0_0_1px_rgba(14,165,233,0.4)]" : "border-neutral-800 hover:border-sky-500/50",
       )}
     >
-      {/* 썸네일 */}
-      <button
-        type="button"
-        onClick={onLoad}
-        disabled={editing}
-        className="pointer-events-auto flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2"
+      {/* 썸네일 — 중첩 <button> 경고 방지를 위해 div role=button 사용 */}
+      <div
+        role="button"
+        tabIndex={editing ? -1 : 0}
+        aria-disabled={editing}
+        onClick={editing ? undefined : onLoad}
+        onKeyDown={(e) => {
+          if (editing) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onLoad();
+          }
+        }}
+        className={cn(
+          "flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2",
+          editing ? "cursor-default" : "cursor-pointer",
+        )}
       >
         {page && thumb ? (
           <div
@@ -429,7 +440,7 @@ function DocCard({
         ) : (
           <div className="text-4xl text-neutral-600">📋</div>
         )}
-      </button>
+      </div>
 
       {/* 메타 */}
       <div className="border-t border-neutral-800 px-3 py-2">

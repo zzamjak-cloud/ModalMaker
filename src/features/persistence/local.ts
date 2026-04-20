@@ -43,16 +43,32 @@ async function migrateLegacy(): Promise<void> {
       safe("docs count", [], () => idbKeys(DOC_STORE) as Promise<string[]>),
       safe("presets count", [], () => idbKeys(PRESET_STORE) as Promise<string[]>),
     ]);
+    logger.info(
+      "persistence",
+      `v2 store: docs=${existingDocs.length}, presets=${existingPresets.length}`,
+    );
     if (existingDocs.length > 0 && existingPresets.length > 0) return;
 
     const legacyDB = await openRawDB("modalmaker-db");
-    if (!legacyDB) return;
+    if (!legacyDB) {
+      logger.info("persistence", "legacy DB 'modalmaker-db' not found (skip migration)");
+      return;
+    }
+
+    const legacyStores = Array.from(legacyDB.objectStoreNames);
+    logger.info(
+      "persistence",
+      `legacy DB opened (version=${legacyDB.version}, stores=${JSON.stringify(legacyStores)})`,
+    );
 
     let migratedDocs = 0;
     let migratedPresets = 0;
+    let legacyDocsFound = 0;
+    let legacyPresetsFound = 0;
     try {
       if (existingDocs.length === 0 && legacyDB.objectStoreNames.contains("documents")) {
         const items = await readAllFromStore(legacyDB, "documents");
+        legacyDocsFound = items.length;
         for (const raw of items) {
           if (raw && typeof (raw as { id?: unknown }).id === "string") {
             const id = (raw as { id: string }).id;
@@ -65,6 +81,7 @@ async function migrateLegacy(): Promise<void> {
       }
       if (existingPresets.length === 0 && legacyDB.objectStoreNames.contains("userPresets")) {
         const items = await readAllFromStore(legacyDB, "userPresets");
+        legacyPresetsFound = items.length;
         for (const raw of items) {
           if (raw && typeof (raw as { id?: unknown }).id === "string") {
             const id = (raw as { id: string }).id;
@@ -78,12 +95,10 @@ async function migrateLegacy(): Promise<void> {
     } finally {
       legacyDB.close();
     }
-    if (migratedDocs + migratedPresets > 0) {
-      logger.info(
-        "persistence",
-        `legacy migration: ${migratedDocs} docs, ${migratedPresets} presets from modalmaker-db`,
-      );
-    }
+    logger.info(
+      "persistence",
+      `legacy migration: found docs=${legacyDocsFound}, presets=${legacyPresetsFound} / migrated docs=${migratedDocs}, presets=${migratedPresets}`,
+    );
   } catch (err) {
     logger.error("persistence", "legacy migration failed", err);
   }

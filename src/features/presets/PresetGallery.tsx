@@ -366,10 +366,7 @@ function DocCard({ doc, onClick }: { doc: NodeDocument; onClick: () => void }) {
   const page = getCurrentPage(doc);
   const thumb = page ? resolveThumbFit(page.viewport, CARD_THUMB_W, CARD_THUMB_H) : null;
   return (
-    <button
-      onClick={onClick}
-      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.25)]"
-    >
+    <ClickableCard onClick={onClick}>
       <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-neutral-950/60 p-2">
         {page && thumb ? (
           <div
@@ -402,7 +399,7 @@ function DocCard({ doc, onClick }: { doc: NodeDocument; onClick: () => void }) {
           {new Date(doc.updatedAt).toLocaleString("ko-KR")}
         </div>
       </div>
-    </button>
+    </ClickableCard>
   );
 }
 
@@ -413,10 +410,7 @@ function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => voi
   const firstPage = entry.document.pages[0];
   const thumb = firstPage ? resolveThumbFit(firstPage.viewport, CARD_THUMB_W, CARD_THUMB_H) : null;
   return (
-    <button
-      onClick={onClick}
-      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.25)]"
-    >
+    <ClickableCard onClick={onClick}>
       <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
         {firstPage && thumb ? (
           <div
@@ -452,17 +446,14 @@ function PresetCard({ entry, onClick }: { entry: PresetEntry; onClick: () => voi
         </div>
         <div className="mt-0.5 truncate text-xs text-neutral-500">{entry.description}</div>
       </div>
-    </button>
+    </ClickableCard>
   );
 }
 
 function UserPresetCard({ doc, onClick }: { doc: LayoutDocument; onClick: () => void }) {
   const thumb = resolveThumbFit(doc.viewport, CARD_THUMB_W, CARD_THUMB_H);
   return (
-    <button
-      onClick={onClick}
-      className="group flex h-44 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60"
-    >
+    <ClickableCard onClick={onClick}>
       <div className="pointer-events-none flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-neutral-900 to-neutral-950 p-2">
         <div
           className="relative overflow-hidden rounded-sm"
@@ -491,6 +482,38 @@ function UserPresetCard({ doc, onClick }: { doc: LayoutDocument; onClick: () => 
           {new Date(doc.updatedAt).toLocaleString("ko-KR")}
         </div>
       </div>
-    </button>
+    </ClickableCard>
+  );
+}
+
+// 공용 카드 래퍼 — <button> 대신 role="button" div로 중첩 버튼 경고 방지.
+// 카드 내부 Leaf가 실제 <button>을 렌더할 수 있기 때문.
+function ClickableCard({
+  onClick,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={cn(
+        "group flex h-44 cursor-pointer flex-col overflow-hidden rounded-lg border border-neutral-800 bg-neutral-900 text-left transition hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(14,165,233,0.25)] focus:outline-none focus:ring-2 focus:ring-sky-500/40",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
