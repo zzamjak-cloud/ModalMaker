@@ -77,6 +77,8 @@ export interface LayoutState {
   updatePage: (pageId: string, patch: Partial<Omit<Page, "id" | "root">>) => void;
   setCurrentPage: (pageId: string) => void;
   movePage: (pageId: string, x: number, y: number) => void;
+  /** 지정 pageId를 Root로 설정. 다른 모든 페이지의 isRoot는 false로 해제 (라디오 동작). */
+  setRootPage: (pageId: string) => void;
 
   registerModule: (sourceNodeId: string) => Module | null;
   unlinkModule: (nodeId: string) => void;

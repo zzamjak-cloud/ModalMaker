@@ -195,9 +195,20 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
   ...buildUiSlice(set),
   ...buildDocumentSlice(set, get, { createEmptyPage, createNode }),
 
-  setDocument: (doc) =>
+  setDocument: (doc) => {
+    const migrated = migrateToV2(doc);
+    // Root 결정: isRoot=true 페이지 > Popup이 아닌 첫 번째 > 기존 currentPageId > 첫 페이지
+    const rootPage =
+      migrated.pages.find((p) => p.isRoot) ??
+      migrated.pages.find((p) => !p.isPopup) ??
+      migrated.pages.find((p) => p.id === migrated.currentPageId) ??
+      migrated.pages[0];
+    const next =
+      rootPage && rootPage.id !== migrated.currentPageId
+        ? { ...migrated, currentPageId: rootPage.id }
+        : migrated;
     set(() => ({
-      document: migrateToV2(doc),
+      document: next,
       past: [],
       future: [],
       lastCoalesceKey: null,
@@ -205,7 +216,8 @@ export const useLayoutStore = create<LayoutState>((set, get) => ({
       selectedIds: [],
       selectedPageId: null,
       editingModuleId: null,
-    })),
+    }));
+  },
 
   resetDocument: () =>
     set(() => ({

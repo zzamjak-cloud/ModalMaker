@@ -28,6 +28,7 @@ export function buildPageActions(
   | "updatePage"
   | "setCurrentPage"
   | "movePage"
+  | "setRootPage"
 > {
   const { createEmptyPage } = deps;
 
@@ -130,6 +131,19 @@ export function buildPageActions(
           const p = draft.pages.find((pg) => pg.id === pageId);
           if (!p) return;
           p.position = { x, y };
+        }),
+      ),
+
+    setRootPage: (pageId) =>
+      set((s) =>
+        commit(s, (draft) => {
+          const exists = draft.pages.some((p) => p.id === pageId);
+          if (!exists) return;
+          // 라디오 동작 — 모든 페이지 isRoot 해제 후 지정 페이지만 true
+          for (const p of draft.pages) {
+            if (p.id === pageId) p.isRoot = true;
+            else if (p.isRoot) delete p.isRoot;
+          }
         }),
       ),
   };

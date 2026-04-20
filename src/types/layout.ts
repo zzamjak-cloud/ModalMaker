@@ -203,6 +203,10 @@ export interface Page {
   position: { x: number; y: number }; // Node View 2D 좌표
   viewport?: ViewportSettings;        // 페이지별 Canvas 해상도
   isPopup?: boolean;                  // true이면 프리뷰에서 이전 페이지 위에 팝업으로 표시
+  /** true이면 문서 로드 시 이 페이지를 Root(시작 페이지)로 사용. 한 문서에 최대 1개 (라디오 동작). */
+  isRoot?: boolean;
+  /** Node View 카드 하단에 표시되는 간단한 메모 */
+  comment?: string;
 }
 
 // 공용 컴포넌트(헤더/사이드바 등). 원본만 수정하면 모든 module-ref에 반영.

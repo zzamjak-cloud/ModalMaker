@@ -9,7 +9,8 @@ import { useLayoutStore } from "@/stores/layoutStore";
 import { NodeRenderer } from "@/features/canvas/NodeRenderer";
 import { VIEWPORT_PRESETS, type ViewportSettings } from "@/types/layout";
 
-const HEADER_H = 28;
+const HEADER_H = 24;
+const COMMENT_H = 32;
 const MAX_PREVIEW_W = 280;
 const MAX_PREVIEW_H = 220;
 
@@ -73,6 +74,7 @@ export const PageCardNode = memo(function PageCardNode({
   );
   const removePage = useLayoutStore((s) => s.removePage);
   const updatePage = useLayoutStore((s) => s.updatePage);
+  const setRootPage = useLayoutStore((s) => s.setRootPage);
 
   if (!page) return null;
   const isCurrent = page.id === currentPageId;
@@ -81,7 +83,7 @@ export const PageCardNode = memo(function PageCardNode({
   // 일반: 자신의 뷰포트 비율로 카드 크기 결정
   const backdropSize = resolvePreviewSize(page.isPopup ? rootPageViewport : page.viewport);
   const { cardW, previewH, isFree } = backdropSize;
-  const cardH = previewH + HEADER_H;
+  const cardH = previewH + HEADER_H + COMMENT_H;
 
   // 팝업 콘텐츠 크기: 팝업 자체 뷰포트, backdrop의 65%×70% 안에 맞게 축소
   let popupSlot: { contentW: number; contentH: number; popW: number; popH: number; popScale: number } | null = null;
@@ -114,36 +116,48 @@ export const PageCardNode = memo(function PageCardNode({
       <Handle type="target" position={Position.Left} style={{ background: "#0ea5e9" }} />
       <Handle type="source" position={Position.Right} style={{ background: "#0ea5e9" }} />
 
-      {/* 헤더 */}
-      <div className="flex items-center gap-1 border-b border-neutral-800 bg-neutral-900 px-2 py-1.5">
+      {/* 헤더 — 제목 / Root / Popup / 삭제 (컴팩트) */}
+      <div className="flex items-center gap-1 border-b border-neutral-800 bg-neutral-900 px-1.5" style={{ height: HEADER_H }}>
         <input
           defaultValue={page.title}
           onBlur={(e) => {
             const next = e.target.value.trim();
             if (next && next !== page.title) updatePage(page.id, { title: next });
           }}
-          className="flex-1 truncate bg-transparent text-[11px] font-medium text-neutral-100 focus:outline-none"
-          placeholder="Untitled page"
+          className="flex-1 truncate bg-transparent text-[10px] font-medium text-neutral-100 focus:outline-none"
+          placeholder="Untitled"
         />
-
-        <label className="flex cursor-pointer items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+        <label
+          className="flex cursor-pointer items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+          title="Root 페이지(시작 페이지)로 지정 — 한 문서에 하나만"
+        >
+          <input
+            type="checkbox"
+            checked={page.isRoot ?? false}
+            onChange={(e) => {
+              if (e.target.checked) setRootPage(page.id);
+              else updatePage(page.id, { isRoot: false });
+            }}
+            className="h-2.5 w-2.5 cursor-pointer accent-sky-400"
+          />
+          <span className="text-[9px] text-neutral-400">Root</span>
+        </label>
+        <label
+          className="flex cursor-pointer items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+          title="팝업 페이지 — 프리뷰에서 이전 페이지 위에 오버레이로 표시"
+        >
           <input
             type="checkbox"
             checked={page.isPopup ?? false}
             onChange={(e) => updatePage(page.id, { isPopup: e.target.checked })}
-            className="h-3 w-3 cursor-pointer accent-sky-400"
+            className="h-2.5 w-2.5 cursor-pointer accent-violet-400"
           />
-          <span className="text-[9px] text-neutral-400">팝업</span>
+          <span className="text-[9px] text-neutral-400">Popup</span>
         </label>
-
-        {page.isPopup && (
-          <span className="rounded-sm bg-violet-500/20 px-1.5 py-0.5 text-[9px] text-violet-300">팝업</span>
-        )}
         {isFree && (
-          <span className="rounded-sm bg-neutral-700/60 px-1.5 py-0.5 text-[9px] text-neutral-400">Free</span>
-        )}
-        {isCurrent && (
-          <span className="rounded-sm bg-sky-500/20 px-1.5 py-0.5 text-[9px] text-sky-300">열림</span>
+          <span className="rounded-sm bg-neutral-700/60 px-1 py-0.5 text-[8px] text-neutral-400">Free</span>
         )}
         <button
           onClick={(e) => { e.stopPropagation(); if (confirm(`"${page.title}" 페이지를 삭제할까요?`)) removePage(page.id); }}
@@ -192,6 +206,24 @@ export const PageCardNode = memo(function PageCardNode({
             <NodeRenderer node={page.root} depth={0} parentIsFlexContainer parentDirection="column" />
           </div>
         )}
+      </div>
+
+      {/* 페이지 하단 코멘트 영역 */}
+      <div
+        className="border-t border-neutral-800 bg-neutral-900/70 px-2 py-1"
+        style={{ height: COMMENT_H }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          defaultValue={page.comment ?? ""}
+          onBlur={(e) => {
+            const next = e.target.value;
+            if (next !== (page.comment ?? "")) updatePage(page.id, { comment: next });
+          }}
+          placeholder="페이지 메모 (선택)"
+          className="w-full bg-transparent text-[10px] leading-none text-neutral-300 placeholder:text-neutral-600 focus:outline-none"
+          title={page.comment}
+        />
       </div>
     </div>
   );
