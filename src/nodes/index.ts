@@ -13,6 +13,7 @@ import "./button";
 import "./foldable";
 import "./container";
 import "./module-ref";
+import "./image";
 
 // 레지스트리 API 재노출
 export * from "./registry";

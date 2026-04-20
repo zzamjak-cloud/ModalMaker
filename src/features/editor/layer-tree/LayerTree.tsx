@@ -146,6 +146,10 @@ function nodeLabel(node: LayoutNode): string {
       const n = (node.props as { label?: string }).label ?? "Module";
       return `⊚ ${n}`;
     }
+    case "image": {
+      const p = node.props as { alt?: string; src?: string };
+      return `🖼 Image${p.alt ? `: ${p.alt}` : p.src ? "" : " (empty)"}`;
+    }
   }
 }
 

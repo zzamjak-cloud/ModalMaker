@@ -13,6 +13,7 @@ export type NodeKind =
   | "split" // 구분선 (solid/dashed/dotted, 가로/세로)
   | "foldable" // 접힘 가능한 섹션. children 보유
   | "icon" // Lucide 아이콘 leaf
+  | "image" // 이미지 (첨부 전엔 플레이스홀더)
   | "module-ref"; // 모듈 인스턴스 (내부 편집 불가, 원본만 수정)
 
 // 컨테이너/폴딩만 자식을 가진다. 그 외는 leaf.
@@ -112,6 +113,21 @@ export interface IconProps {
   color?: string;  // hex, 기본 currentColor
 }
 
+export interface ImageProps {
+  /** 이미지 소스 — base64 DataURL(첨부) 또는 외부 URL. 비어있으면 플레이스홀더 */
+  src?: string;
+  /** 접근성용 대체 텍스트 */
+  alt?: string;
+  /** 이미지 배치 — CSS object-fit. 기본 "cover" */
+  fit?: "cover" | "contain" | "fill";
+  /** 외곽선 스타일. 기본 "none" */
+  outlineStyle?: "none" | "solid" | "dashed" | "dotted";
+  /** 외곽선 두께(px). 기본 1, 0~16 권장 */
+  outlineWidth?: number;
+  /** 외곽선 색상. 기본 "#525252" */
+  outlineColor?: string;
+}
+
 export interface ModuleRefProps {
   moduleId: string;   // NodeDocument.modules의 id
   label?: string;     // 레이어 트리/보조 표기
@@ -127,6 +143,7 @@ export type NodeProps =
   | SplitProps
   | FoldableProps
   | IconProps
+  | ImageProps
   | ModuleRefProps;
 
 // 인터렉션 이벤트

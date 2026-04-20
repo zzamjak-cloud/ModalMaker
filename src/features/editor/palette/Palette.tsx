@@ -6,6 +6,7 @@ import {
   Box,
   CheckSquare,
   ChevronsUpDown,
+  Image as ImageIcon,
   Loader,
   Minus,
   MousePointerClick,
@@ -31,6 +32,7 @@ const LEGACY_ORDER: PaletteItem[] = [
   { kind: "input", label: "Input", Icon: TextCursorInput },
   { kind: "checkbox", label: "Checkbox", Icon: CheckSquare },
   { kind: "icon", label: "Icon", Icon: Sparkles },
+  { kind: "image", label: "Image", Icon: ImageIcon },
   { kind: "progress", label: "Progress", Icon: Loader },
   { kind: "split", label: "Split", Icon: Minus },
 ];
@@ -38,10 +40,8 @@ const LEGACY_ORDER: PaletteItem[] = [
 // registry + legacy 병합 — registry에 있으면 우선, 순서는 LEGACY_ORDER + registry 추가분
 function buildItems(): PaletteItem[] {
   const out: PaletteItem[] = [];
-  // registry에 이관된 kind를 Container/Foldable 뒤·나머지 legacy 사이에 삽입하려면 순서 고민 필요 —
-  // 현재 단계에서는 LEGACY_ORDER의 위치대로 나열하고, registry에 이관된 kind는 그 위치를 대체.
   const registryOrder: NodeKind[] = [
-    "container", "foldable", "text", "button", "input", "checkbox", "icon", "progress", "split",
+    "container", "foldable", "text", "button", "input", "checkbox", "icon", "image", "progress", "split",
   ];
   for (const kind of registryOrder) {
     const desc = getDescriptor(kind);

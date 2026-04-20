@@ -41,6 +41,10 @@ function safeLabel(node: LayoutNode): string {
         const n = (node.props as { label?: string }).label ?? "Module";
         return n;
       }
+      case "image": {
+        const p = node.props as { alt?: string };
+        return p.alt ? `Image: ${p.alt}` : "Image";
+      }
     }
   })();
   // Mermaid 예약 문자 이스케이프

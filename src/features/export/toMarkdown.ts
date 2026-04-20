@@ -69,6 +69,10 @@ function nodeLine(node: LayoutNode): string {
         ?? `Module ${(node.props as { moduleId?: string }).moduleId ?? ""}`;
       return `[Module: ${n}]`;
     }
+    case "image": {
+      const p = node.props as { alt?: string; src?: string };
+      return `[Image: ${p.alt ?? (p.src ? "attached" : "placeholder")}]`;
+    }
   }
 }
 
