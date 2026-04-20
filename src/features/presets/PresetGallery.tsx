@@ -21,6 +21,7 @@ import {
 } from "./presetRegistry";
 import { currentAdapter } from "@/features/persistence";
 import { getRecentIds, pushRecent } from "@/features/persistence/recentStore";
+import { useAuthStore } from "@/features/auth/authStore";
 import { NodeRenderer } from "@/features/canvas/NodeRenderer";
 import { resolveThumbFit } from "@/features/canvas/thumbnailUtils";
 import { logger } from "@/lib/logger";
@@ -37,6 +38,16 @@ const CARD_THUMB_H = 130;
 export function PresetGallery({ onClose }: { onClose: () => void }) {
   const setDocument = useLayoutStore((s) => s.setDocument);
 
+  // Firebase auth가 초기화되기 전에 currentAdapter()를 호출하면 user=null 상태로 localAdapter가
+  // 선택돼 IndexedDB(빈 저장소)만 조회된다. 실제 데이터는 Firestore에 있을 수 있으므로
+  // auth ready + user.uid 확정 이후에 로드해야 최근/저장/프리셋이 올바르게 나타난다.
+  const initAuth = useAuthStore((s) => s.init);
+  const authReady = useAuthStore((s) => s.ready);
+  const authUid = useAuthStore((s) => s.user?.uid ?? null);
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
+
   const [topTab, setTopTab] = useState<TopTab>("recent");
   const [presetSubTab, setPresetSubTab] = useState<PresetSubTab>("All");
 
@@ -52,46 +63,70 @@ export function PresetGallery({ onClose }: { onClose: () => void }) {
   // 첫 로드 완료 시점에 자동 탭 이동을 1회만 적용 — 이후 사용자 탭 클릭을 덮어쓰지 않음
   const didAutoSwitchRef = useRef(false);
 
+  // auth 미확정 상태에서는 아무것도 로드하지 않는다. ready로 전이되면 (로그인/익명 모두)
+  // authUid 의존성으로 useEffect가 재실행돼 올바른 어댑터(local/remote)로 조회한다.
   useEffect(() => {
-    // 최근: id 목록을 유지 순서대로 IDB 조회 (null은 정리)
+    if (!authReady) return;
+    let cancelled = false;
     (async () => {
       const ids = getRecentIds();
-      logger.info("presets", `recent ids count=${ids.length}`);
+      logger.info("presets", `recent ids count=${ids.length} (uid=${authUid ?? "none"})`);
       if (ids.length === 0) {
+        if (cancelled) return;
         setRecentDocs([]);
         setLoading((p) => ({ ...p, recent: false }));
         return;
       }
+      const adapter = currentAdapter();
       const results = await Promise.all(
-        ids.map((id) => currentAdapter().loadDocument(id).catch(() => null)),
+        ids.map((id) => adapter.loadDocument(id).catch(() => null)),
       );
+      if (cancelled) return;
       const docs = results.filter((d): d is NodeDocument => !!d);
       logger.info("presets", `recent loaded=${docs.length}/${ids.length}`);
       setRecentDocs(docs);
       setLoading((p) => ({ ...p, recent: false }));
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, authUid]);
 
   useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
     (async () => {
       try {
         const docs = await currentAdapter().listDocuments();
-        logger.info("presets", `listDocuments returned ${docs.length} docs`);
+        if (cancelled) return;
+        logger.info("presets", `listDocuments returned ${docs.length} docs (uid=${authUid ?? "none"})`);
         setSavedDocs(docs);
+        setLoadError(null);
       } catch (err) {
+        if (cancelled) return;
         logger.error("persistence", "listDocuments failed", err);
         setLoadError(err instanceof Error ? err.message : String(err));
       }
-      setLoading((p) => ({ ...p, saved: false }));
+      if (!cancelled) setLoading((p) => ({ ...p, saved: false }));
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, authUid]);
 
   useEffect(() => {
+    if (!authReady) return;
+    let cancelled = false;
     currentAdapter()
       .listUserPresets()
-      .then(setUserPresets)
+      .then((list) => {
+        if (!cancelled) setUserPresets(list);
+      })
       .catch((err) => logger.error("presets", "listUserPresets failed", err));
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, authUid]);
 
   // 최초 로드 완료 후 빈 탭이면 자동으로 다른 탭으로 1회만 이동.
   // 이후 사용자가 '최근'을 다시 클릭하면 그대로 유지.
